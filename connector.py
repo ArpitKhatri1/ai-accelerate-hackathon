@@ -18,6 +18,7 @@ import requests
 from datetime import datetime, timezone, timedelta
 from typing import Dict, List, Any, Optional
 import time
+import base64
 
 
 
@@ -32,7 +33,8 @@ def schema(configuration: dict):
         {"table": "documents", "primary_key": ["envelope_id", "document_id"]},
         {"table": "templates", "primary_key": ["template_id"]},
         {"table": "custom_fields", "primary_key": ["envelope_id", "field_name"]},
-        {"table": "document_tabs", "primary_key": ["envelope_id", "document_id", "tab_id"]}
+        {"table": "document_tabs", "primary_key": ["envelope_id", "document_id", "tab_id"]},
+        {"table": "document_contents", "primary_key": ["envelope_id", "document_id"]}
     ]
 
 
@@ -55,6 +57,18 @@ def get_base_url(configuration: dict) -> str:
     """
     return f"{configuration['base_url']}/v2.1/accounts/{configuration['account_id']}"
 
+
+def make_api_request_for_content(url: str, headers: Dict[str, str]) -> Optional[bytes]:
+    """
+    Make authenticated API request to DocuSign for binary file content.
+    """
+    try:
+        response = requests.get(url, headers=headers, timeout=60) # Increased timeout for larger files
+        response.raise_for_status()
+        return response.content
+    except requests.exceptions.RequestException as e:
+        logger.warning(f"Failed to download document content from {url}: {e}")
+        return None
 
 def make_api_request(url: str, headers: Dict[str, str], params: Optional[Dict] = None) -> Dict[str, Any]:
     """
@@ -106,7 +120,23 @@ def make_api_request(url: str, headers: Dict[str, str], params: Optional[Dict] =
     logger.severe(f"API request failed after {max_retries} attempts: {error_msg}")
     raise Exception(error_msg)
 
-
+def fetch_document_content(configuration: dict, envelope_id: str, document_id: str) -> Optional[bytes]:
+    """
+    Fetch the binary content of a specific document.
+    """
+    base_url = get_base_url(configuration)
+    # Use a modified header that doesn't demand JSON in response
+    headers = { "Authorization": f"Bearer {configuration['access_token']}" }
+    url = f"{base_url}/envelopes/{envelope_id}/documents/{document_id}"
+    
+    try:
+        content = make_api_request_for_content(url, headers)
+        return content
+    except Exception as e:
+        logger.warning(f"Could not fetch content for document {document_id} in envelope {envelope_id}: {e}")
+        return None
+    
+    
 def fetch_envelopes(configuration: dict, state: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Fetch envelopes data with incremental sync support.
@@ -353,15 +383,28 @@ def update(configuration: dict, state: Dict[str, Any]):
         # Documents
         documents = fetch_documents_for_envelope(configuration, envelope_id)
         for d in documents:
-            if d.get("documentId"): # Guard clause for primary key
+            document_id = d.get("documentId")
+            if document_id: # Guard clause for primary key
                 op.upsert("documents", {
                     "envelope_id": str(envelope_id),
-                    "document_id": str(d["documentId"]),
+                    "document_id": str(document_id),
                     "name": str(d.get("name", "")),
                     "type": str(d.get("type", "")),
                     "pages": str(d.get("pages", "0"))
                 })
 
+                # NEW: Fetch and upsert the full document content.
+                logger.info(f"Fetching content for document {document_id} in envelope {envelope_id}")
+                content = fetch_document_content(configuration, envelope_id, document_id)
+                if content:
+                    # Content is stored as a Base64 encoded string to handle binary data safely.
+                    encoded_content = base64.b64encode(content).decode('utf-8')
+                    op.upsert("document_contents", {
+                        "envelope_id": str(envelope_id),
+                        "document_id": str(document_id),
+                        "content_base64": encoded_content
+                    })
+       
         # Custom Fields
         custom_fields = fetch_custom_fields_for_envelope(configuration, envelope_id)
         for f in custom_fields:
