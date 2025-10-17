@@ -30,11 +30,14 @@ def schema(configuration: dict):
     return [
         {"table": "envelopes", "primary_key": ["envelope_id"]},
         {"table": "recipients", "primary_key": ["envelope_id", "recipient_id"]},
+        {"table": "enhanced_recipients", "primary_key": ["envelope_id", "recipient_id"]},
+        {"table": "audit_events", "primary_key": ["envelope_id", "event_id"]},
+        {"table": "envelope_notifications", "primary_key": ["envelope_id", "notification_id"]},
         {"table": "documents", "primary_key": ["envelope_id", "document_id"]},
+        {"table": "document_contents", "primary_key": ["envelope_id", "document_id"]},
+        {"table": "document_tabs", "primary_key": ["envelope_id", "document_id", "tab_id"]},
         {"table": "templates", "primary_key": ["template_id"]},
         {"table": "custom_fields", "primary_key": ["envelope_id", "field_name"]},
-        {"table": "document_tabs", "primary_key": ["envelope_id", "document_id", "tab_id"]},
-        {"table": "document_contents", "primary_key": ["envelope_id", "document_id"]}
     ]
 
 
@@ -176,6 +179,64 @@ def fetch_envelopes(configuration: dict, state: Dict[str, Any]) -> List[Dict[str
     
     logger.info(f"Fetched {len(all_envelopes)} envelopes")
     return all_envelopes
+
+def fetch_audit_events(configuration: dict, envelope_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetch envelope audit events for SLA, deviation, and workflow tracking.
+    """
+    base_url = get_base_url(configuration)
+    headers = get_docusign_headers(configuration)
+    url = f"{base_url}/envelopes/{envelope_id}/audit_events"
+
+    try:
+        data = make_api_request(url, headers)
+        events = data.get("auditEvents", [])
+        for event in events:
+            event["envelope_id"] = envelope_id
+        return events
+    except Exception as e:
+        logger.warning(f"Could not fetch audit events for envelope {envelope_id}: {e}")
+        return []
+
+def fetch_envelope_notifications(configuration: dict, envelope_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetch envelope notifications like reminders and expirations.
+    """
+    base_url = get_base_url(configuration)
+    headers = get_docusign_headers(configuration)
+    url = f"{base_url}/envelopes/{envelope_id}/notification"
+
+    try:
+        data = make_api_request(url, headers)
+        notifications = data.get("notifications", [])
+        for n in notifications:
+            n["envelope_id"] = envelope_id
+        return notifications
+    except Exception as e:
+        logger.warning(f"Could not fetch notifications for envelope {envelope_id}: {e}")
+        return []
+
+def fetch_enhanced_recipients(configuration: dict, envelope_id: str) -> List[Dict[str, Any]]:
+    """
+    Fetch recipients with full status history, reminders, declines.
+    """
+    base_url = get_base_url(configuration)
+    headers = get_docusign_headers(configuration)
+    url = f"{base_url}/envelopes/{envelope_id}/recipients"
+    
+    try:
+        data = make_api_request(url, headers)
+        recipients = []
+        for recipient_type in ["signers", "carbon_copies", "certified_deliveries", "in_person_signers"]:
+            type_recipients = data.get(recipient_type, [])
+            for r in type_recipients:
+                r["recipient_type"] = recipient_type
+                r["envelope_id"] = envelope_id
+                recipients.append(r)
+        return recipients
+    except Exception as e:
+        logger.warning(f"Could not fetch enhanced recipients for envelope {envelope_id}: {e}")
+        return []
 
 
 def fetch_recipients_for_envelope(configuration: dict, envelope_id: str) -> List[Dict[str, Any]]:
@@ -379,6 +440,46 @@ def update(configuration: dict, state: Dict[str, Any]):
                     "type": str(r.get("recipient_type", "")),
                     "routing_order": str(r.get("routingOrder", "0"))
                 })
+        enhanced_recipients = fetch_enhanced_recipients(configuration, envelope_id)
+        for er in enhanced_recipients:
+          if er.get("recipientId"):
+            op.upsert("enhanced_recipients", {
+                "envelope_id": str(envelope_id),
+                "recipient_id": str(er["recipientId"]),
+                "name": str(er.get("name", "")),
+                "email": str(er.get("email", "")),
+                "status": str(er.get("status", "")),
+                "type": str(er.get("recipient_type", "")),
+                "routing_order": str(er.get("routingOrder", 0)),
+                "declined_reason": str(er.get("declinedReason", "")),
+                "sent_timestamp": str(er.get("sentDateTime", "")),
+                "signed_timestamp": str(er.get("signedDateTime", "")),
+            })
+        audit_events = fetch_audit_events(configuration, envelope_id)
+      
+        for event in audit_events:
+            event_id = event.get("eventFields", [{}])[0].get("value")  # fallback if needed
+            # Flatten eventFields into a dict
+            flat_event = {field["name"].lower(): str(field.get("value", "")) for field in event.get("eventFields", [])}
+            flat_event["envelope_id"] = envelope_id
+            # Use a combination of envelope_id + logTime as a surrogate primary key
+            flat_event["event_id"] = f"{envelope_id}_{flat_event.get('logtime', '')}"
+         
+            op.upsert("audit_events", flat_event)
+
+        # Notifications
+        notifications = fetch_envelope_notifications(configuration, envelope_id)
+       
+        for n in notifications:
+            if n.get("notificationId"):
+                op.upsert("envelope_notifications", {
+                    "envelope_id": str(envelope_id),
+                    "notification_id": str(n.get("notificationId")),
+                    "notification_type": str(n.get("notificationType", "")),
+                    "scheduled_date": str(n.get("scheduledDate", "")),
+                    "sent_date": str(n.get("sentDate", "")),
+                })
+
         
         # Documents
         documents = fetch_documents_for_envelope(configuration, envelope_id)
