@@ -1,102 +1,52 @@
 "use client";
 
-import { useRef, useState } from "react";
-import gsap from "gsap";
+import { useRef } from "react";
+import { useRouter } from "next/navigation";
 import { useGSAP } from "@gsap/react";
+import gsap from "gsap";
 import Dashboard from "@/components/dashboard/dashboard";
-import AIChat from "@/components/AIChat/AIChat";
 
 export default function Home() {
-  const chatRef = useRef<HTMLDivElement>(null);
   const dashboardRef = useRef<HTMLDivElement>(null);
   const backgroundColorRef = useRef<HTMLDivElement>(null);
-  const [isDashboardVisible, setIsDashboardVisible] = useState(true);
+  const router = useRouter();
 
-  const isMountedRef = useRef(false);
-
-    console.log(isMountedRef.current)
-  // This hook will now handle the "animate in"
-  useGSAP(
-    () => {
-      // When the component mounts (or isDashboardVisible becomes true)
-      // animate it "from" an invisible state.
-      if (isMountedRef.current) {
-        if (isDashboardVisible) {
-          gsap.from(dashboardRef.current, {
-            opacity: 0,
-            y: 20,
-            duration: 0.5,
-            ease: "power2.out",
-          });
-        }
-      }
-
-      isMountedRef.current = true;
-
-    },
-    [isDashboardVisible]  // Rerun this effect when isDashboardVisible changes
-  );
+  useGSAP(() => {
+    if (dashboardRef.current) {
+      gsap.from(dashboardRef.current, {
+        opacity: 0,
+        y: 20,
+        duration: 0.6,
+        ease: "power2.out",
+      });
+    }
+  }, []);
 
   const handleChatClick = () => {
-    if (isDashboardVisible) {
-      // --- HIDE ANIMATION ---
-      const tl = gsap.timeline({
-        onComplete: () => {
-          setIsDashboardVisible(false);
-        },
-      });
-
-      tl.to(backgroundColorRef.current, {
-        backgroundColor: "#dbeafe", // to blue
-        duration: 0.5,
-        ease: "power3.inOut",
-      });
-
-      tl.to(
-        dashboardRef.current,
-        {
-          opacity: 0,
-          y: 50,
-          duration: 0.5,
-          ease: "power2.out",
-        },
-        "<"
-      );
-    } else {
-
-      gsap.to(backgroundColorRef.current, {
-        backgroundColor: "#ffffff", // back to white
-        duration: 0.5,
-        ease: "power3.inOut",
-      });
-
-      // 2. Set state to true. This will re-render, mount the
-      //    Dashboard, and trigger the useGSAP hook to animate it in.
-      setIsDashboardVisible(true);
-    }
+    router.push("/ai-chat");
   };
 
   return (
     <div
       ref={backgroundColorRef}
-    
+      className="relative w-full min-h-screen bg-white"
     >
-      {/* Dashboard container (for animation ref) */}
-      {isDashboardVisible ? (
-        <div ref={dashboardRef} className="relative z-10 h-full ">
-          <Dashboard />
-        </div>
-      ) : (
-        <AIChat />
-      )}
+      <div ref={dashboardRef} className="relative z-10 h-full">
+        <Dashboard />
+      </div>
 
-      {/* Chat Bubble */}
-      <div className="absolute right-16 bottom-16 z-20">
-        <div
-          ref={chatRef}
+      <div className="pointer-events-none absolute bottom-16 right-16 z-20 flex items-center gap-3">
+        <span className="pointer-events-auto inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-slate-900/40">
+          Chat with AI
+        </span>
+        <button
+          type="button"
           onClick={handleChatClick}
-          className="bg-red-800 h-10 w-10 rounded-full cursor-pointer"
-        />
+          aria-label="Open AI chat"
+          className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/40 transition hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
+        >
+          💬
+        </button>
       </div>
     </div>
   );

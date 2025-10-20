@@ -27,20 +27,14 @@ import { GlobeIcon } from 'lucide-react';
 import { useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { AIBarChart } from './AIBarChart'; // Import from new code
 
-// Define the expected combined message structure (from new code)
-interface CombinedMessageContent {
-  text?: string;
-  chart?: {
-    type: 'bar'; // Extend this if you add more chart types
-    data: any[];
-  };
-}
+import { ChatChartRenderer } from './ChatChartRenderer';
+import type { AgentMessageContent } from '@/lib/agent-types';
+import { normalizeStructuredPayload } from '@/lib/agent-response';
 
 interface ChatMessage {
   role: 'user' | 'assistant';
-  text: string | CombinedMessageContent; // Allow both string and combined content
+  content: AgentMessageContent;
 }
 
 const models = [
@@ -54,9 +48,6 @@ const models = [
   { id: 'cohere-command', name: 'Command' },
   { id: 'mistral-7b', name: 'Mistral 7B' },
 ];
-
-const SUBMITTING_TIMEOUT = 200;
-const STREAMING_TIMEOUT = 2000;
 
 const PromptInputComponent = () => {
   const [text, setText] = useState<string>('');
@@ -98,10 +89,20 @@ const PromptInputComponent = () => {
     }
 
     setStatus('submitted');
-    setMessages((prev) => [
-      ...prev,
-      { role: 'user', text: message.text || '' }, // User message is always string
-    ]);
+
+    const userMessage: ChatMessage = {
+      role: 'user',
+      content: {
+        text: message.text || '',
+      },
+    };
+
+    setMessages((prev) => [...prev, userMessage]);
+
+    const historyPayload = [...messages, userMessage].map((m) => ({
+      role: m.role,
+      text: m.content?.text ?? '',
+    }));
 
     try {
       const response = await fetch('http://localhost:8001/chat', {
@@ -109,9 +110,9 @@ const PromptInputComponent = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ 
-          message: message.text || '', 
-          history: messages.map(m => ({ text: m.text, role: m.role }))  // Send history
+        body: JSON.stringify({
+          message: message.text || '',
+          history: historyPayload,
         }),
       });
 
@@ -123,27 +124,55 @@ const PromptInputComponent = () => {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let responseText = ''; // Accumulates the full raw response
+  let structuredFromStream: AgentMessageContent | null = null;
 
       // Add a placeholder for the assistant's message
-      setMessages((prev) => [...prev, { role: 'assistant', text: '' as string | CombinedMessageContent }]);
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: 'assistant',
+          content: { raw: '' },
+        },
+      ]);
 
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
 
         const chunk = decoder.decode(value);
+        console.debug('[AIChat] Received chunk', chunk);
         const lines = chunk.split('\n\n');
 
         for (const line of lines) {
           if (line.startsWith('data:')) {
             try {
               const data = JSON.parse(line.substring(5));
-              if (data.text) {
-                responseText += data.text;
-              } else if (data.error) {
-                console.error('Error from backend:', data.error);
-                responseText = 'An error occurred while streaming.';
-                break;
+              console.debug('[AIChat] Parsed SSE line', data);
+              if (typeof data === 'string') {
+                responseText += data;
+              } else if (data && typeof data === 'object') {
+                const payload = data as Record<string, unknown>;
+                const rawCandidate = payload['raw'];
+                if (typeof rawCandidate === 'string' && rawCandidate.length > 0) {
+                  responseText = rawCandidate;
+                } else {
+                  const textCandidate = payload['text'];
+                  if (typeof textCandidate === 'string') {
+                    responseText += textCandidate;
+                  }
+                }
+
+                const structuredCandidate = normalizeStructuredPayload(payload['structured']);
+                if (structuredCandidate) {
+                  structuredFromStream = structuredCandidate;
+                }
+
+                const errorCandidate = payload['error'];
+                if (typeof errorCandidate === 'string' && errorCandidate.length > 0) {
+                  console.error('Error from backend:', errorCandidate);
+                  responseText = 'An error occurred while streaming.';
+                  break;
+                }
               }
             } catch (e) {
               console.error('Error parsing JSON chunk:', e);
@@ -161,35 +190,50 @@ const PromptInputComponent = () => {
         cleanedText = match[1];
       }
 
+      console.debug('[AIChat] Raw responseText', responseText);
+      console.debug('[AIChat] Cleaned text candidate', cleanedText);
+
       // Now, try to parse the cleanedText as the CombinedMessageContent
-      let parsedContent: CombinedMessageContent | string = cleanedText;
-      try {
-        const potentialJson = JSON.parse(cleanedText);
-        // Check if it matches our expected structure for combined content
-        if (potentialJson && (potentialJson.text || potentialJson.chart)) {
-          parsedContent = potentialJson as CombinedMessageContent;
-        } else if (
-          potentialJson &&
-          potentialJson.type === 'bar' &&
-          potentialJson.data
-        ) {
-          // Handle cases where the agent *still* returns just chart JSON (old behavior)
-          parsedContent = { chart: potentialJson };
-        }
-      } catch (e) {
-        // Not a JSON object, so `cleanedText` remains a string
+      const messageContent: AgentMessageContent = {
+        raw: responseText,
+      };
+
+      if (structuredFromStream) {
+        messageContent.text = structuredFromStream.text ?? messageContent.text;
+        messageContent.charts = structuredFromStream.charts;
       }
+
+      try {
+        if (!messageContent.text || !messageContent.charts) {
+          const potentialJson = JSON.parse(cleanedText) as unknown;
+          const normalized = normalizeStructuredPayload(potentialJson);
+          if (normalized) {
+            messageContent.text = messageContent.text ?? normalized.text;
+            messageContent.charts = messageContent.charts ?? normalized.charts;
+          }
+        }
+      } catch (parseError) {
+        console.debug('Failed to parse assistant payload as JSON.', parseError);
+      }
+      if (!messageContent.text) {
+        messageContent.text = cleanedText.trim() ? cleanedText : responseText;
+      }
+      console.debug('[AIChat] Final message content constructed', messageContent);
       // --- End of Fix ---
 
       // Update state ONCE with the final, parsed content
       setMessages((prev) => {
         const newMessages = [...prev];
         // Store the parsed content directly in the text field
-        newMessages[newMessages.length - 1] = {
-          ...newMessages[newMessages.length - 1],
-          text: parsedContent, // Store the object/string here
-        };
-        console.log('Final content being set:', parsedContent);
+        const lastIndex = newMessages.length - 1;
+        if (lastIndex >= 0) {
+          const lastMessage = newMessages[lastIndex];
+          newMessages[lastIndex] = {
+            ...lastMessage,
+            content: messageContent,
+          };
+        }
+        console.log('Final content being set:', messageContent);
         return newMessages;
       });
     } catch (error) {
@@ -197,10 +241,17 @@ const PromptInputComponent = () => {
       setStatus('error');
       setMessages((prev) => {
         const newMessages = [...prev];
-        newMessages[newMessages.length - 1] = {
-          ...newMessages[newMessages.length - 1],
-          text: 'An error occurred. Please try again.',
-        };
+        const lastIndex = newMessages.length - 1;
+        if (lastIndex >= 0) {
+          const lastMessage = newMessages[lastIndex];
+          newMessages[lastIndex] = {
+            ...lastMessage,
+            content: {
+              ...lastMessage.content,
+              text: 'An error occurred. Please try again.',
+            },
+          };
+        }
         return newMessages;
       });
     } finally {
@@ -210,14 +261,14 @@ const PromptInputComponent = () => {
 
   return (
     // Use layout from new code
-    <div className="flex flex-col justify-end size-full bg-white h-fit rounded-lg">
+    <div className="flex flex-col w-full justify-end  bg-white h-fit rounded-lg">
       {/* Use message rendering from new code */}
-      <div className="p-4 space-y-4 overflow-y-auto">
+      <div className="p-4 space-y-4 overflow-y-auto w-full">
         {messages.map((msg, i) => (
           <div
             key={i}
             className={`flex ${
-              msg.role === 'user' ? 'justify-end' : 'justify-start'
+              msg.role === 'user' ? 'justify-end w-4/6 ml-auto' : 'justify-start'
             }`}
           >
             <div
@@ -230,49 +281,26 @@ const PromptInputComponent = () => {
               {(() => {
                 // This logic handles rendering for both user (string)
                 // and assistant (string | CombinedMessageContent)
-                let content: CombinedMessageContent | string = msg.text || '';
+                const content = msg.content ?? {};
+                const textToRender =
+                  content.text ?? (typeof content.raw === 'string' ? content.raw : '');
 
-                // User messages are always strings, but assistant messages
-                // might be pre-parsed objects.
-                // This logic handles both cases gracefully.
-                if (typeof msg.text === 'string' && msg.role === 'assistant') {
-                  try {
-                    // Try to parse if it's a string (e.g., streaming placeholder or error)
-                    const parsed = JSON.parse(msg.text);
-                    if (parsed && (parsed.text || parsed.chart)) {
-                      content = parsed as CombinedMessageContent;
-                    } else if (
-                      parsed &&
-                      parsed.type === 'bar' &&
-                      parsed.data
-                    ) {
-                      // Still handle direct chart JSON if agent sends it
-                      content = { chart: parsed };
-                    }
-                  } catch (e) {
-                    // Not JSON, or not our structured JSON, leave as string
-                  }
-                }
-
-                // Render based on the final content type
                 return (
                   <>
-                    {typeof content === 'string' && (
+                    {textToRender && (
                       <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {content}
+                        {textToRender}
                       </ReactMarkdown>
                     )}
-                    {typeof content === 'object' && content.text && (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {content.text}
-                      </ReactMarkdown>
-                    )}
-                    {typeof content === 'object' &&
-                      content.chart &&
-                      content.chart.type === 'bar' && (
-                        <div className="mt-2">
-                          {/* Add some spacing */}
-                          <AIBarChart data={content.chart.data} />
+                    {Array.isArray(content.charts) &&
+                      content.charts.length > 0 && (
+                        <div className="mt-3 space-y-3">
+                          {content.charts.map((chart, chartIndex) => (
+                            <ChatChartRenderer
+                              key={chart.id ?? `${i}-chart-${chartIndex}`}
+                              chart={chart}
+                            />
+                          ))}
                         </div>
                       )}
                   </>

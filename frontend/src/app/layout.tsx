@@ -48,7 +48,7 @@ export default function RootLayout({
               <main className="overflow-x-hidden">
                 {/* <SidebarTrigger /> */}
                 <div className='flex justify-center h-screen w-screen overflow-y-scroll bg-white relative'>
-                  <div className='max-w-[1200px]'>
+                  <div className='max-w-[1200px] w-full'>
                     {children}
                   </div>
                 </div>

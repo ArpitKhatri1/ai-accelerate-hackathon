@@ -15,7 +15,7 @@ import {
   YAxis,
 } from 'recharts'
 
-import { ChartType } from './types'
+import { ChartVisualizationType } from './types'
 
 const BLUE_SHADES = ['#1d4ed8', '#2563eb', '#3b82f6', '#60a5fa', '#93c5fd']
 
@@ -50,7 +50,7 @@ const pieData = [
 ]
 
 export const chartMetadata: Record<
-  ChartType,
+  ChartVisualizationType,
   {
     label: string
     description: string
@@ -75,7 +75,7 @@ export const chartMetadata: Record<
 }
 
 interface ChartRendererProps {
-  type: ChartType
+  type: ChartVisualizationType
   height: number
 }
 

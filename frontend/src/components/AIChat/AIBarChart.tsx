@@ -10,9 +10,12 @@ import {
   Tooltip,
 } from 'recharts';
 
-// Make props generic
+interface ChartDatum {
+  [key: string]: string | number;
+}
+
 interface BarChartProps {
-  data: any[];
+  data: ChartDatum[];
 }
 
 export function AIBarChart({ data }: BarChartProps) {
@@ -33,9 +36,13 @@ export function AIBarChart({ data }: BarChartProps) {
 
   // Find the (first) other key that is a number
   // This will be our Y-axis (the bar value)
-  const yAxisKey = keys.find(
-    (key) => key !== xAxisKey && typeof data[0][key] === 'number',
-  );
+  const yAxisKey = keys.find((key) => {
+    if (key === xAxisKey) {
+      return false;
+    }
+    const value = data[0][key];
+    return typeof value === 'number';
+  });
 
   // 3. Handle cases where data is in the wrong format
   if (!yAxisKey) {

@@ -5,7 +5,12 @@ import { useEffect, useMemo, useState } from 'react'
 import { PlusCircle } from 'lucide-react'
 
 import { DashboardBuilder } from '@/components/analytics/dashboard-builder'
-import { AnalyticsDashboard, ChartWidget } from '@/components/analytics/types'
+import { AnalyticsDashboard, DashboardWidget } from '@/components/analytics/types'
+import {
+  StoredDashboard,
+  StoredWidget,
+  normalizeStoredWidget,
+} from '@/components/analytics/storage'
 import { Button } from '@/components/ui/button'
 import {
   Card,
@@ -27,11 +32,6 @@ import { useLocalStorageState } from '@/hooks/use-local-storage'
 
 const STORAGE_KEY = 'custom-analytics-dashboards'
 
-type StoredChartWidget = Omit<ChartWidget, 'width'> & { width?: ChartWidget['width'] }
-type StoredDashboard = Omit<AnalyticsDashboard, 'charts'> & {
-  charts: StoredChartWidget[]
-}
-
 const generateId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
@@ -46,6 +46,8 @@ const formatDate = (value: string) =>
     minute: '2-digit',
   })
 
+const normalizeWidget = (widget: StoredWidget): DashboardWidget => normalizeStoredWidget(widget)
+
 export default function AnalyticsPage() {
   const [dashboards, setDashboards, isHydrated] = useLocalStorageState<StoredDashboard[]>(
     STORAGE_KEY,
@@ -56,31 +58,32 @@ export default function AnalyticsPage() {
   useEffect(() => {
     if (!isHydrated) return
     const needsNormalization = dashboards.some((dashboard) =>
-      dashboard.charts.some((chart) => chart.width === undefined)
+      dashboard.charts.some((chart) => {
+        if (!('kind' in chart)) return true
+        if (!('prompt' in chart) || typeof chart.prompt !== 'string') return true
+        if (!('width' in chart)) return true
+        if (chart.kind === 'chart') {
+          if (!('chartType' in chart) || typeof chart.chartType !== 'string') return true
+          if (!('height' in chart) || chart.height === undefined) return true
+        }
+        return false
+      })
     )
     if (needsNormalization) {
       setDashboards((prev) =>
         prev.map((dashboard) => ({
           ...dashboard,
-          charts: dashboard.charts.map((chart) => ({
-            ...chart,
-            width: chart.width ?? 'full',
-          })),
+          charts: dashboard.charts.map((chart) => normalizeWidget(chart)),
         }))
       )
     }
   }, [dashboards, isHydrated, setDashboards])
 
-  const normalizeChart = (chart: StoredChartWidget): ChartWidget => ({
-    ...chart,
-    width: chart.width ?? 'full',
-  })
-
-  const normalizedDashboards = useMemo(
+  const normalizedDashboards = useMemo<AnalyticsDashboard[]>(
     () =>
       dashboards.map((dashboard) => ({
         ...dashboard,
-        charts: dashboard.charts.map(normalizeChart),
+        charts: dashboard.charts.map((chart) => normalizeWidget(chart)),
       })),
     [dashboards]
   )
@@ -88,7 +91,7 @@ export default function AnalyticsPage() {
   const handleCreateDashboard = (
     payload: Omit<AnalyticsDashboard, 'id' | 'createdAt'>
   ) => {
-    const normalizedCharts = payload.charts.map(normalizeChart)
+    const normalizedCharts = payload.charts.map((chart) => normalizeWidget(chart))
     const dashboard: StoredDashboard = {
       ...payload,
       charts: normalizedCharts,
@@ -129,7 +132,7 @@ export default function AnalyticsPage() {
             <div>
               <h1 className="text-2xl font-semibold text-primary">Custom Analytics</h1>
               <p className="text-sm text-muted-foreground">
-                Build bespoke dashboards with drag-and-drop charts powered by shadcn components.
+                Drag widgets, write prompts, and let the agents render charts or insights when the dashboard loads.
               </p>
             </div>
             <Button onClick={() => setBuilderOpen(true)}>
@@ -171,7 +174,7 @@ export default function AnalyticsPage() {
               <DialogHeader>
                 <DialogTitle>Create custom analytics</DialogTitle>
                 <DialogDescription>
-                  Drag charts into your layout and save when you&apos;re ready. All charts use blue-themed demo data.
+                  Drag widgets into your layout, add prompts, and we&apos;ll call the agents to render them when the dashboard loads.
                 </DialogDescription>
               </DialogHeader>
               <DashboardBuilder

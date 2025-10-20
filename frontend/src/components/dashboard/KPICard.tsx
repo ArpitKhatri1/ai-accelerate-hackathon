@@ -24,7 +24,7 @@ export function KPICard({ title, value, description, icon: Icon, trend, iconColo
          {Icon &&  <Icon className={cn('h-5 w-5', iconColor)} /> } 
       </CardHeader>
       <CardContent>
-        <div className="text-3xl font-bold mb-1">{value}</div>
+        <div className="text-3xl font-bold mb-1 text-blue-600">{value}</div>
         {trend && (
           <div className="flex items-center gap-1 mb-2">
             <span

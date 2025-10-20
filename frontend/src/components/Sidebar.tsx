@@ -1,5 +1,6 @@
+import Link from 'next/link'
 import React from 'react'
-import { Calendar, Home, Inbox, Search, Settings } from "lucide-react"
+import { Home, Inbox, MessageCircle } from "lucide-react"
 
 import {
     Sidebar,
@@ -25,6 +26,11 @@ const AppSidebar = () => {
             url: "/analytics",
             icon: Inbox,
         },
+        {
+            title: "AI Chat",
+            url: "/ai-chat",
+            icon: MessageCircle,
+        },
      
     ]
     return (
@@ -41,10 +47,10 @@ const AppSidebar = () => {
                             {items.map((item) => (
                                 <SidebarMenuItem key={item.title}>
                                     <SidebarMenuButton asChild>
-                                        <a href={item.url}>
+                                        <Link href={item.url}>
                                             <item.icon />
                                             <span>{item.title}</span>
-                                        </a>
+                                        </Link>
                                     </SidebarMenuButton>
                                 </SidebarMenuItem>
                             ))}
