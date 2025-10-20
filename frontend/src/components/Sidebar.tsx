@@ -28,7 +28,7 @@ const AppSidebar = () => {
      
     ]
     return (
-        <Sidebar className='fixed left-0 top-0' collapsible='icon' >
+        <Sidebar className='' collapsible='icon' >
             <SidebarContent >
                 <SidebarGroup>
                     <SidebarGroupLabel>Navigation

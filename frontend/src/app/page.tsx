@@ -3,7 +3,7 @@
 import { useRef, useState } from "react";
 import gsap from "gsap";
 import { useGSAP } from "@gsap/react";
-import Dashboard from "@/components/dashboard";
+import Dashboard from "@/components/dashboard/dashboard";
 import AIChat from "@/components/AIChat/AIChat";
 
 export default function Home() {
@@ -79,7 +79,7 @@ export default function Home() {
   return (
     <div
       ref={backgroundColorRef}
-      className="flex justify-center h-screen w-screen overflow-hidden bg-white relative"
+    
     >
       {/* Dashboard container (for animation ref) */}
       {isDashboardVisible ? (

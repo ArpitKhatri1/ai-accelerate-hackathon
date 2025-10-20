@@ -54,9 +54,9 @@ const chartConfig = {
   },
 } satisfies ChartConfig
 
-export function ChartPieLabel() {
+export function ChartPieLabel({className}: {className?: string}) {
   return (
-    <Card className="flex flex-col">
+    <Card className={`flex flex-col ${className}`}>
       <CardHeader className="items-center pb-0">
         <CardTitle>Pie Chart - Label</CardTitle>
         <CardDescription>January - June 2024</CardDescription>

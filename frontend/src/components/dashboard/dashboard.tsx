@@ -1,14 +1,15 @@
 import React from 'react'
-import { KPICard } from './dashboard/KPICard'
-import { ChartPieLabel } from './dashboard/PieChart'
+import { KPICard } from './KPICard'
+import { ChartPieLabel } from './PieChart'
+import { ContractSigningsChart, EnvelopeTypeCycleChart } from './BarChart'
 
 const Dashboard = () => {
   return (
-    <div className='max-w-[1200px] mt-4'>
+    <div className='mt-4 '>
       <div className='text-2xl mb-3  font-bold'>
         Your Campain Metrics
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="flex gap-6 mb-6 ">
         <KPICard
           title="Average Contract Cycle Time"
           value={`2 days`}
@@ -30,7 +31,13 @@ const Dashboard = () => {
           iconColor="text-amber-600" />
 
       </div>
-      <ChartPieLabel/>
+      <div className="mb-6">
+        <EnvelopeTypeCycleChart />
+      </div>
+      <div className="gap-6 grid grid-cols-1 lg:grid-cols-5">
+        <ContractSigningsChart className="lg:col-span-3" />
+        <ChartPieLabel className="lg:col-span-2" />
+      </div>
     </div>
   )
 }

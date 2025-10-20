@@ -33,7 +33,7 @@ export default function RootLayout({
       >
         <div className="flex flex-col h-full">
           {/* ✅ Navbar fixed at the top */}
-  
+
 
           {/* ✅ Main layout area — sidebar below navbar */}
           <SidebarProvider>
@@ -47,7 +47,11 @@ export default function RootLayout({
               {/* Main content area */}
               <main className="overflow-x-hidden">
                 {/* <SidebarTrigger /> */}
-                {children}
+                <div className='flex justify-center h-screen w-screen overflow-y-scroll bg-white relative'>
+                  <div className='max-w-[1200px]'>
+                    {children}
+                  </div>
+                </div>
               </main>
             </div>
           </SidebarProvider>
