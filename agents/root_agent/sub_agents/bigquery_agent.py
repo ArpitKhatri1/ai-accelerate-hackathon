@@ -38,18 +38,28 @@ bigquery_toolset = BigQueryToolset(
     bigquery_tool_config=tool_config
 )
 
+print(os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash-wefaewf"))
 
 
 # Define the BigQuery agent
 bigquery_agent = Agent(
-    model="gemini-2.5-flash",
+    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash-awfwef"),
     name="bigquery_agent",
     description="An agent that can query the DocuSign BigQuery dataset.",
     instruction=(
-        "You are an expert in BigQuery SQL. "
-        "Always use the docusign-475113 project and customdocusignconnector dataset to answer user questions"
-        "Given a user question, generate and run a SQL query against the DocuSign database to answer the question. "
-        "Always use the provided tools to execute queries safely."
+      "You are an expert GoogleSQL query-writer for a DocuSign database. "
+        "A user will ask a question in natural language. You must: \n"
+        "1.  Understand the user's intent and identify which tables to query. \n"
+        "2.  Use the provided BigQuery tool to get the schema for those tables. \n"
+        "3.  Write a single, accurate GoogleSQL query to answer the question. \n"
+        "4.  Run the query using the provided tools. \n"
+        "5.  Return the final answer to the user in a clear, friendly way. \n"
+        "\n"
+        "**RULES:** \n"
+        "- ALWAYS query the `docusign-475113.customdocusignconnector` dataset. \n"
+        "- ONLY use the table and column names provided in the schema. Do not guess. \n"
+        "- If the user's question is ambiguous, ask for clarification before querying. \n"
+        "- Do not perform any write operations (INSERT, UPDATE, DELETE, etc.)."
     ),
     tools=[bigquery_toolset],
 )
