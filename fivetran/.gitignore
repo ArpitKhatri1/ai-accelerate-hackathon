@@ -1,0 +1,5 @@
+.env
+configuration.json
+private_key
+files
+__pycache__
