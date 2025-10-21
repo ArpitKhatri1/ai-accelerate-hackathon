@@ -138,7 +138,7 @@ BASE_INSTRUCTION = (
 
 # Define the BigQuery agent
 bigquery_agent = Agent(
-    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash-awfwef"),
+    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
     name="bigquery_agent",
     description="An agent that can query the DocuSign BigQuery dataset.",
     instruction=BASE_INSTRUCTION + "\n\n" + DOCUSIGN_SCHEMA_REFERENCE,

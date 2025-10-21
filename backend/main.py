@@ -1,21 +1,79 @@
 import asyncio
+import datetime
+import decimal
 import json
+import os
 import re
 import sys
-import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional, cast
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from fastapi.middleware.cors import CORSMiddleware
 from google.genai import types
 from dotenv import load_dotenv
 import google.generativeai as genai
+import google.auth
+from google.auth.credentials import Credentials as GoogleCredentials
+from google.cloud import bigquery
+from google.oauth2 import service_account
 
 load_dotenv()
 
 # Configure the Google AI API key
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+
+# BigQuery configuration
+_DEFAULT_SERVICE_ACCOUNT_FILE = os.path.abspath(
+    os.path.join(
+        os.path.dirname(__file__),
+        "../agents/docusign-475113-4054c4d08fa3-python-runner-service.json",
+    )
+)
+SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", _DEFAULT_SERVICE_ACCOUNT_FILE)
+
+DOCUSIGN_DATASET = "docusign-475113.customdocusignconnector"
+ENVELOPES_TABLE = f"`{DOCUSIGN_DATASET}.envelopes`"
+DOCUMENTS_TABLE = f"`{DOCUSIGN_DATASET}.documents`"
+CUSTOM_FIELDS_TABLE = f"`{DOCUSIGN_DATASET}.custom_fields`"
+RECIPIENTS_TABLE = f"`{DOCUSIGN_DATASET}.recipients`"
+
+
+def _create_bigquery_client() -> Optional[bigquery.Client]:
+    credentials: Optional[GoogleCredentials] = None
+    project_id = os.getenv("GOOGLE_CLOUD_PROJECT")
+
+    if SERVICE_ACCOUNT_FILE and os.path.exists(SERVICE_ACCOUNT_FILE):
+        try:
+            svc_credentials = service_account.Credentials.from_service_account_file(
+                SERVICE_ACCOUNT_FILE,
+                scopes=["https://www.googleapis.com/auth/cloud-platform"],
+            )
+            credentials = cast(GoogleCredentials, svc_credentials)
+            if svc_credentials.project_id:
+                project_id = svc_credentials.project_id
+        except Exception as exc:  # pragma: no cover - logging path
+            print(f"[analytics] Failed to load service account credentials: {exc}")
+            credentials = None
+
+    if credentials is None:
+        try:
+            default_credentials, project_id = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            credentials = cast(GoogleCredentials, default_credentials)
+        except Exception as exc:  # pragma: no cover - logging path
+            print(f"[analytics] Default credentials not available: {exc}")
+            return None
+
+    try:
+        return bigquery.Client(credentials=credentials, project=project_id)
+    except Exception as exc:  # pragma: no cover - logging path
+        print(f"[analytics] BigQuery client creation failed: {exc}")
+        return None
+
+
+bigquery_client = _create_bigquery_client()
 
 # Add the parent directory to the Python path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
@@ -47,6 +105,314 @@ async def setup_session():
     return await session_service.create_session(
         app_name=APP_NAME, user_id=USER_ID, session_id=SESSION_ID
     )
+
+
+@app.get("/analytics/kpis")
+async def get_dashboard_kpis():
+    query = f"""
+    SELECT
+      SAFE_DIVIDE(
+        AVG(IF(sent_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY), contract_cycle_time_hours, NULL)),
+        24.0
+      ) AS avg_cycle_days,
+      COUNTIF(status = 'completed' AND completed_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 30 DAY)) AS completed_last_30,
+      COUNTIF(status NOT IN ('completed', 'voided', 'declined') AND last_modified_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 90 DAY)) AS pending_envelopes
+    FROM {ENVELOPES_TABLE}
+    """
+
+    try:
+        rows = await run_bigquery_query(query)
+    except Exception as exc:
+        print(f"[analytics] Failed to fetch KPI data: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to fetch analytics KPIs")
+
+    record = rows[0] if rows else {}
+    avg_cycle_days = float(record.get("avg_cycle_days") or 0.0)
+    completed_last_30 = int(record.get("completed_last_30") or 0)
+    pending_envelopes = int(record.get("pending_envelopes") or 0)
+
+    return {
+        "average_contract_cycle_days": round(avg_cycle_days, 2),
+        "average_contract_cycle_hours": round(avg_cycle_days * 24.0, 2),
+        "agreements_completed_last_30_days": completed_last_30,
+        "pending_envelopes_last_90_days": pending_envelopes,
+    }
+
+
+@app.get("/analytics/envelopes/cycle-time-by-document")
+async def get_cycle_time_by_document(limit: int = 6):
+    limit = max(1, min(limit, 25))
+    query = f"""
+        WITH doc_type AS (
+            SELECT
+                envelope_id,
+                -- normalize common keys and trim/upper the value
+                UPPER(TRIM(value)) AS document_type
+            FROM {CUSTOM_FIELDS_TABLE}
+            WHERE LOWER(field_name) IN (
+                'document_type', 'documenttype', 'doc_type', 'doctype'
+            )
+        )
+        SELECT
+            COALESCE(NULLIF(doc_type.document_type, ''), 'Unknown') AS document_type,
+            SAFE_DIVIDE(AVG(envelope.contract_cycle_time_hours), 24.0) AS avg_cycle_days
+        FROM {ENVELOPES_TABLE} AS envelope
+        LEFT JOIN doc_type
+            ON doc_type.envelope_id = envelope.envelope_id
+        WHERE envelope.contract_cycle_time_hours IS NOT NULL
+        GROUP BY document_type
+        HAVING avg_cycle_days IS NOT NULL AND document_type IS NOT NULL
+        ORDER BY avg_cycle_days DESC
+        LIMIT @limit
+    """
+
+    params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+
+    try:
+        rows = await run_bigquery_query(query, params)
+    except Exception as exc:
+        print(f"[analytics] Failed to fetch cycle time data: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to fetch cycle time analytics")
+
+    items = []
+    for row in rows:
+        doc_type = (row.get("document_type") or "").strip()
+        if not doc_type:
+            doc_type = "Unknown"
+        avg_days_val = row.get("avg_cycle_days")
+        if avg_days_val is None:
+            continue
+        items.append({
+            "type": doc_type.title(),
+            "avgDays": round(float(avg_days_val or 0.0), 2),
+        })
+
+    return {"items": items}
+
+
+@app.get("/analytics/envelopes/daily-sent-vs-completed")
+async def get_daily_sent_vs_completed(days: int = 10):
+    window_days = max(1, min(days, 30))
+    query = f"""
+    WITH offsets AS (
+      SELECT value AS offset
+      FROM UNNEST(GENERATE_ARRAY(0, @window_days - 1)) AS value
+    ),
+    calendar AS (
+      SELECT DATE_SUB(CURRENT_DATE(), INTERVAL offset DAY) AS event_date
+      FROM offsets
+    ),
+    sent AS (
+      SELECT DATE(sent_timestamp) AS event_date, COUNT(*) AS sent_count
+      FROM {ENVELOPES_TABLE}
+      WHERE sent_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @window_days DAY)
+      GROUP BY event_date
+    ),
+    completed AS (
+      SELECT DATE(completed_timestamp) AS event_date, COUNT(*) AS completed_count
+      FROM {ENVELOPES_TABLE}
+      WHERE completed_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL @window_days DAY)
+      GROUP BY event_date
+    )
+    SELECT
+      calendar.event_date AS event_date,
+      COALESCE(sent.sent_count, 0) AS sent,
+      COALESCE(completed.completed_count, 0) AS completed
+    FROM calendar
+    LEFT JOIN sent USING (event_date)
+    LEFT JOIN completed USING (event_date)
+    ORDER BY event_date
+    """
+
+    params = [bigquery.ScalarQueryParameter("window_days", "INT64", window_days)]
+
+    try:
+        rows = await run_bigquery_query(query, params)
+    except Exception as exc:
+        print(f"[analytics] Failed to fetch daily envelope metrics: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to fetch envelope trend analytics")
+
+    items = [
+        {
+            "date": row.get("event_date"),
+            "sent": int(row.get("sent") or 0),
+            "completed": int(row.get("completed") or 0),
+        }
+        for row in rows
+    ]
+
+    return {"items": items}
+
+
+@app.get("/analytics/envelopes/status-distribution")
+async def get_status_distribution(limit: int = 6):
+    limit = max(1, min(limit, 20))
+    query = f"""
+    SELECT
+      status,
+      COUNT(*) AS total
+    FROM {ENVELOPES_TABLE}
+    GROUP BY status
+    ORDER BY total DESC
+    LIMIT @limit
+    """
+
+    params = [bigquery.ScalarQueryParameter("limit", "INT64", limit)]
+
+    try:
+        rows = await run_bigquery_query(query, params)
+    except Exception as exc:
+        print(f"[analytics] Failed to fetch status distribution: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to fetch envelope status distribution")
+
+    items = [
+        {
+            "status": (row.get("status") or "unknown").title(),
+            "count": int(row.get("total") or 0),
+        }
+        for row in rows
+    ]
+
+    return {"items": items}
+
+
+@app.get("/analytics/envelopes/table")
+async def get_envelopes_table(limit: int = 12, page: int = 1, q: Optional[str] = None, status: Optional[str] = None):
+    """Return tabular envelope data for dashboard table with recipients list.
+
+    Columns: envelope_id, subject (name), recipients (comma-separated), sent_date, completed_date, status
+    """
+    limit = max(1, min(limit, 100))
+    page = max(1, page)
+    offset = (page - 1) * limit
+
+    search_clause = ""
+    status_clause = ""
+    # allow mixing scalar and array params
+    params: List[Any] = [
+        bigquery.ScalarQueryParameter("limit", "INT64", limit),
+        bigquery.ScalarQueryParameter("offset", "INT64", offset),
+    ]
+
+    if q:
+        search_clause = f"""
+            AND (
+                LOWER(envelope.envelope_id) LIKE LOWER(CONCAT('%', @q, '%')) OR
+                LOWER(envelope.subject) LIKE LOWER(CONCAT('%', @q, '%')) OR
+                EXISTS (
+                    SELECT 1 FROM {RECIPIENTS_TABLE} r
+                    WHERE r.envelope_id = envelope.envelope_id
+                        AND (LOWER(r.name) LIKE LOWER(CONCAT('%', @q, '%')) OR LOWER(r.email) LIKE LOWER(CONCAT('%', @q, '%')))
+                )
+            )
+        """
+        params.append(bigquery.ScalarQueryParameter("q", "STRING", q))
+
+    # status filter: accepts comma-separated values, case-insensitive
+    if status:
+        status_values = [s.strip().lower() for s in status.split(",") if s.strip()]
+        if status_values:
+            status_clause = """
+                AND LOWER(envelope.status) IN UNNEST(@status_list)
+            """
+            params.append(bigquery.ArrayQueryParameter("status_list", "STRING", status_values))
+
+    query = f"""
+    WITH recipients_agg AS (
+        SELECT envelope_id, STRING_AGG(name, ', ' ORDER BY name) AS recipients
+        FROM {RECIPIENTS_TABLE}
+        GROUP BY envelope_id
+    ), filtered AS (
+        SELECT
+            envelope.envelope_id,
+            envelope.subject AS name,
+            recipients_agg.recipients AS recipients,
+            DATE(envelope.sent_timestamp) AS sent_date,
+            DATE(envelope.completed_timestamp) AS completed_date,
+            envelope.status
+        FROM {ENVELOPES_TABLE} envelope
+        LEFT JOIN recipients_agg USING (envelope_id)
+    WHERE 1=1
+    {search_clause}
+    {status_clause}
+    ), ordered AS (
+        SELECT *, COUNT(*) OVER() AS total_count
+        FROM filtered
+        ORDER BY sent_date DESC NULLS LAST, envelope_id DESC
+    )
+    SELECT * FROM ordered
+    LIMIT @limit OFFSET @offset
+    """
+
+    try:
+        rows = await run_bigquery_query(query, params)
+    except Exception as exc:
+        print(f"[analytics] Failed to fetch envelopes table: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to fetch envelopes table")
+
+    def _fmt_date(value: Any) -> Optional[str]:
+        if not value:
+            return None
+        if isinstance(value, str):
+            return value
+        if isinstance(value, (datetime.datetime, datetime.date)):
+            return value.isoformat()
+        return str(value)
+
+    items: List[Dict[str, Any]] = [
+        {
+            "envelopeId": row.get("envelope_id"),
+            "name": row.get("name") or "—",
+            "recipients": row.get("recipients") or "—",
+            "sentDate": _fmt_date(row.get("sent_date")),
+            "completedDate": _fmt_date(row.get("completed_date")),
+            "status": (row.get("status") or "unknown").lower(),
+        }
+        for row in rows
+    ]
+    total = 0
+    if rows:
+        try:
+            total = int(rows[0].get("total_count") or 0)
+        except Exception:
+            total = 0
+
+    return {"items": items, "page": page, "limit": limit, "total": total}
+
+
+def _serialize_value(value: Any) -> Any:
+    if isinstance(value, decimal.Decimal):
+        return float(value)
+    if isinstance(value, datetime.datetime):
+        return value.isoformat()
+    if isinstance(value, datetime.date):
+        return value.isoformat()
+    return value
+
+
+def _serialize_rows(rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    return [
+        {column: _serialize_value(value) for column, value in row.items()}
+        for row in rows
+    ]
+
+
+async def run_bigquery_query(
+    query: str, query_parameters: Optional[List[bigquery.ScalarQueryParameter]] = None
+) -> List[Dict[str, Any]]:
+    client = bigquery_client
+    if client is None:
+        raise RuntimeError("BigQuery client is not configured")
+
+    def _execute() -> List[Dict[str, Any]]:
+        job_config = bigquery.QueryJobConfig(query_parameters=query_parameters or [])
+        job = client.query(query, job_config=job_config)
+        results = job.result()
+        return [dict(row.items()) for row in results]
+
+    loop = asyncio.get_running_loop()
+    raw_rows = await loop.run_in_executor(None, _execute)
+    return _serialize_rows(raw_rows)
 
 ALLOWED_CHART_TYPES = {"bar", "double-bar", "line", "pie"}
 

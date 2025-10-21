@@ -1,38 +1,70 @@
-"use client"
+"use client";
 
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts"
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
-import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
-} from "@/components/ui/chart"
+import { useEffect, useMemo, useState } from "react";
+import { Bar, BarChart as RechartsBarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "@/components/ui/chart";
+import { Skeleton } from "@/components/ui/skeleton";
+import { analyticsApi } from "@/lib/analytics-api";
+import { useLocalStorageCache } from "@/hooks/use-local-storage-cache";
 
-// Dummy data for envelope types
-const envelopeTypeData = [
-  { type: "Employment Contracts", avgDays: 3.2 },
-  { type: "NDA Agreements", avgDays: 1.5 },
-  { type: "Vendor Agreements", avgDays: 4.8 },
-  { type: "Service Contracts", avgDays: 5.2 },
-  { type: "Partnership Agreements", avgDays: 6.5 },
-  { type: "Sales Contracts", avgDays: 2.8 },
-]
-
+// Config for the vertical bar chart (avg cycle time)
 const envelopeTypeConfig = {
   avgDays: {
     label: "Avg Days",
-    color: "hsl(217, 91%, 60%)", // Blue color
+    color: "hsl(217, 91%, 60%)",
   },
-} satisfies ChartConfig
+} satisfies ChartConfig;
 
-export function EnvelopeTypeCycleChart({className}: {className?: string}) {
+type CycleTimeItem = {
+  type: string;
+  avgDays: number;
+};
+
+export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
+  const TEN_MIN = 10 * 60 * 1000;
+  const [items, setItems, isHydrated, isFresh] = useLocalStorageCache<CycleTimeItem[]>(
+    "analytics:cycle-time-by-document:v1",
+    [],
+    TEN_MIN
+  );
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (isFresh && items && items.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+
+    analyticsApi
+      .getCycleTimeByDocument(controller.signal)
+      .then((res) => setItems(res.items ?? []))
+      .catch((err: unknown) => {
+        if ((err as Error)?.name !== "AbortError") {
+          setError(err instanceof Error ? err.message : "Failed to load cycle time data");
+        }
+      })
+      .finally(() => setIsLoading(false));
+
+    return () => controller.abort();
+  }, [isHydrated, isFresh]);
+
+  const chartData = useMemo(
+    () =>
+      items.map((item) => ({
+        type: item.type,
+        avgDays: Number.isFinite(item.avgDays) ? Number(item.avgDays) : 0,
+      })),
+    [items]
+  );
+
+  const showEmpty = !isLoading && !error && chartData.length === 0;
+
   return (
     <Card className={className}>
       <CardHeader>
@@ -40,86 +72,138 @@ export function EnvelopeTypeCycleChart({className}: {className?: string}) {
         <CardDescription>Average time to completion by document type</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={envelopeTypeConfig} className="h-[300px] w-full">
-          <BarChart accessibilityLayer data={envelopeTypeData} layout="vertical">
-            <CartesianGrid horizontal={false} />
-            <YAxis
-              dataKey="type"
-              type="category"
-              tickLine={false}
-              tickMargin={10}
-              axisLine={false}
-              width={150}
-              style={{ fontSize: '12px' }}
-            />
-            <XAxis 
-              type="number"
-              tickLine={false}
-              axisLine={false}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent 
-                indicator="line"
-                formatter={(value) => `${value} days`}
-              />}
-            />
-            <Bar dataKey="avgDays" fill="var(--color-avgDays)" radius={4} />
-          </BarChart>
-        </ChartContainer>
+        {isLoading ? (
+          <Skeleton className="h-[300px] w-full" />
+        ) : error ? (
+          <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        ) : showEmpty ? (
+          <div className="text-sm text-muted-foreground">No document types found yet.</div>
+        ) : (
+          <ChartContainer config={envelopeTypeConfig} className="h-[300px] w-full">
+            <RechartsBarChart accessibilityLayer data={chartData} layout="vertical">
+              <CartesianGrid horizontal={false} />
+              <YAxis
+                dataKey="type"
+                type="category"
+                tickLine={false}
+                tickMargin={10}
+                axisLine={false}
+                width={160}
+                style={{ fontSize: "12px" }}
+              />
+              <XAxis type="number" tickLine={false} axisLine={false} />
+              <ChartTooltip
+                cursor={false}
+                content={
+                  <ChartTooltipContent
+                    indicator="line"
+                    formatter={(value) =>
+                      typeof value === "number" ? `${value.toFixed(2)} days` : `${value} days`
+                    }
+                  />
+                }
+              />
+              <Bar dataKey="avgDays" fill="var(--color-avgDays)" radius={4} />
+            </RechartsBarChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </Card>
-  )
+  );
 }
 
-// Dummy data for the last 10 days
-const chartData = [
-
-  { date: "Oct 14", sent: 52, signed: 42 },
-  { date: "Oct 15", sent: 48, signed: 40 },
-  { date: "Oct 16", sent: 60, signed: 55 },
-  { date: "Oct 17", sent: 55, signed: 48 },
-  { date: "Oct 18", sent: 58, signed: 52 },
-  { date: "Oct 19", sent: 62, signed: 58 },
-]
-
-const chartConfig = {
+// Daily sent vs completed (uses backend analytics)
+const dailyConfig = {
   sent: {
     label: "Sent",
-    color: "hsl(217, 91%, 60%)", // Blue color
+    color: "hsl(217, 91%, 60%)",
   },
-  signed: {
-    label: "Signed",
-    color: "hsl(267, 91%, 60%)", // Orange color
+  completed: {
+    label: "Completed",
+    color: "hsl(267, 91%, 60%)",
   },
-} satisfies ChartConfig
+} satisfies ChartConfig;
 
-export function ContractSigningsChart({className}: {className?: string}) {
+type DailyItem = { date: string; sent: number; completed: number };
+
+export function ContractSigningsChart({ className }: { className?: string }) {
+  const DAYS = 10;
+  const TEN_MIN = 10 * 60 * 1000;
+  const [items, setItems, isHydrated, isFresh] = useLocalStorageCache<DailyItem[]>(
+    `analytics:daily-sent-completed:${DAYS}:v1`,
+    [],
+    TEN_MIN
+  );
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isHydrated) return;
+    if (isFresh && items && items.length > 0) {
+      setIsLoading(false);
+      return;
+    }
+    const controller = new AbortController();
+    setIsLoading(true);
+    setError(null);
+
+    analyticsApi
+      .getDailySentVsCompleted(DAYS, controller.signal)
+      .then((res) => setItems(res.items ?? []))
+      .catch((err: unknown) => {
+        if ((err as Error)?.name !== "AbortError") {
+          setError("Unable to load daily envelope metrics. Try again later.");
+        }
+      })
+      .finally(() => setIsLoading(false));
+
+    return () => controller.abort();
+  }, [isHydrated, isFresh]);
+
+  const chartData = useMemo(() => {
+    const fmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+    return items.map((d) => ({
+      date: fmt.format(new Date(d.date)),
+      sent: d.sent,
+      completed: d.completed,
+    }));
+  }, [items]);
+
   return (
     <Card className={className}>
       <CardHeader>
         <CardTitle>Contract Signings</CardTitle>
-        <CardDescription>Last 10 days comparison</CardDescription>
+        <CardDescription>Daily sent vs completed envelopes</CardDescription>
       </CardHeader>
       <CardContent>
-        <ChartContainer config={chartConfig} className="h-[300px] w-full">
-          <BarChart accessibilityLayer data={chartData}>
-            <CartesianGrid vertical={false} />
-            <XAxis
-              dataKey="date"
-              tickLine={false}
-              tickMargin={10}
-              axisLine={false}
-            />
-            <ChartTooltip
-              cursor={false}
-              content={<ChartTooltipContent indicator="dashed" />}
-            />
-            <Bar dataKey="sent" fill="var(--color-sent)" radius={4} />
-            <Bar dataKey="signed" fill="var(--color-signed)" radius={4} />
-          </BarChart>
-        </ChartContainer>
+        {isLoading ? (
+          <div className="space-y-3">
+            {[...Array(3)].map((_, i) => (
+              <Skeleton key={i} className="h-8 w-full" />
+            ))}
+          </div>
+        ) : error ? (
+          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-4 text-sm text-destructive">
+            {error}
+          </div>
+        ) : chartData.length === 0 ? (
+          <div className="rounded-md border border-primary/20 bg-primary/5 p-4 text-sm text-primary">
+            No recent envelope activity available.
+          </div>
+        ) : (
+          <ChartContainer config={dailyConfig} className="h-[300px] w-full">
+            <RechartsBarChart accessibilityLayer data={chartData}>
+              <CartesianGrid vertical={false} />
+              <XAxis dataKey="date" tickLine={false} tickMargin={10} axisLine={false} />
+              <ChartTooltip cursor={false} content={<ChartTooltipContent indicator="dashed" />} />
+              <Bar dataKey="sent" fill="var(--color-sent)" radius={4} />
+              <Bar dataKey="completed" fill="var(--color-completed)" radius={4} />
+            </RechartsBarChart>
+          </ChartContainer>
+        )}
       </CardContent>
     </Card>
-  )
+  );
 }

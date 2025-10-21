@@ -35,7 +35,7 @@ export default function Home() {
         <Dashboard />
       </div>
 
-      <div className="pointer-events-none absolute bottom-16 right-16 z-20 flex items-center gap-3">
+      {/* <div className="pointer-events-none absolute bottom-16 right-16 z-20 flex items-center gap-3">
         <span className="pointer-events-auto inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-slate-900/40">
           Chat with AI
         </span>
@@ -47,7 +47,7 @@ export default function Home() {
         >
           💬
         </button>
-      </div>
+      </div> */}
     </div>
   );
 }
