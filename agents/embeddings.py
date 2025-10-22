@@ -1,29 +1,104 @@
 import os
 import base64
 import binascii
-import json
 import fitz  # PyMuPDF
 from google.cloud import bigquery
-import google.generativeai as genai
 from dotenv import load_dotenv
-from langchain_text_splitters import RecursiveCharacterTextSplitter
 
-# Your API key from Google AI Studio
+# Optional: load environment variables if needed
 load_dotenv()
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
 
 # --- Helper Functions ---
 
-def extract_text_from_binary(pdf_binary_data):
-    """Opens a PDF from binary data in memory and extracts all text content."""
+def extract_text_from_binary(pdf_binary_data: bytes) -> str:
+    """Extracts all text content from a PDF opened from in-memory bytes."""
     try:
         with fitz.open(stream=pdf_binary_data, filetype="pdf") as doc:
-            full_text = ""
+            text_parts: list[str] = []
             for page in doc:
-                full_text += page.get_text()
-        return full_text
+                # Use explicit 'text' mode and guard against non-string results per type stubs
+                raw = page.get_text("text")
+                page_text = raw if isinstance(raw, str) else ""
+                text_parts.append(page_text.replace('\n', ' '))
+            return "".join(text_parts)
     except Exception as e:
         return f"Error processing PDF data: {e}"
+
+def ensure_content_text_column(client: bigquery.Client, table_id: str) -> None:
+    """Adds content_text STRING column if it does not exist."""
+    ddl = f"""
+        ALTER TABLE `{table_id}`
+        ADD COLUMN IF NOT EXISTS content_text STRING
+    """
+    client.query(ddl).result()
+    print(f"Ensured content_text column exists on {table_id}")
+
+def get_base64_column_name(client: bigquery.Client, table_id: str) -> str | None:
+    """Detect whether the table uses content_base64 or content_base_64; return the name found."""
+    try:
+        table = client.get_table(table_id)
+        names = {field.name for field in table.schema}
+        if "content_base64" in names:
+            return "content_base64"
+        if "content_base_64" in names:
+            return "content_base_64"
+        return None
+    except Exception as e:
+        print(f"\n⚠️ Could not fetch schema for {table_id}: {e}")
+        return None
+
+def is_document_processed(
+    client: bigquery.Client,
+    table_id: str,
+    envelope_id: str,
+    document_id: str,
+) -> bool:
+    """Returns True if content_text for the (envelope_id, document_id) is already populated and non-empty."""
+    sql = f"""
+        SELECT content_text
+        FROM `{table_id}`
+        WHERE envelope_id = @envelope_id AND document_id = @document_id
+        LIMIT 1
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("envelope_id", "STRING", envelope_id),
+            bigquery.ScalarQueryParameter("document_id", "STRING", document_id),
+        ]
+    )
+    try:
+        rows = list(client.query(sql, job_config=job_config).result())
+        if not rows:
+            return False
+        val = rows[0].get("content_text") if hasattr(rows[0], "get") else rows[0]["content_text"]
+        return bool(val and str(val).strip())
+    except Exception as e:
+        print(f"   ⚠️ Warning: could not check processed state: {e}")
+        return False
+
+def update_document_text_and_clear_base64(
+    client: bigquery.Client,
+    table_id: str,
+    envelope_id: str,
+    document_id: str,
+    content_text: str,
+    base64_col: str,
+) -> None:
+    """Update row with extracted text and clear the base64 column in a single DML statement."""
+    sql = f"""
+        UPDATE `{table_id}`
+        SET content_text = @content_text,
+            {base64_col} = ''
+        WHERE envelope_id = @envelope_id AND document_id = @document_id
+    """
+    job_config = bigquery.QueryJobConfig(
+        query_parameters=[
+            bigquery.ScalarQueryParameter("content_text", "STRING", content_text),
+            bigquery.ScalarQueryParameter("envelope_id", "STRING", envelope_id),
+            bigquery.ScalarQueryParameter("document_id", "STRING", document_id),
+        ]
+    )
+    client.query(sql, job_config=job_config).result()
 
 def push_embeddings_to_bigquery(client, project_id, dataset_id, table_name, data_to_insert):
     """Pushes a list of row data (as dicts) to the specified BigQuery table."""
@@ -95,123 +170,99 @@ def check_if_doc_exists_in_embeddings(
 # --- Main Script Logic ---
 
 if __name__ == "__main__":
-    # 1. Construct a BigQuery client object
+    # 1) Construct a BigQuery client object
     try:
-        client = bigquery.Client.from_service_account_json('a.json')
+        client = bigquery.Client.from_service_account_json(
+            os.path.join(os.path.dirname(__file__), "docusign-arpit.json")
+        )
     except FileNotFoundError:
-        print("Error: Service account key file 'a.json' not found. Please check the file path.")
-        exit()
+        print("Error: Service account key file 'docusign-arpit.json' not found. Please check the file path.")
+        raise SystemExit(1)
     except Exception as e:
         print(f"Error initializing BigQuery client: {e}")
-        exit()
+        raise SystemExit(1)
 
-    # 2. Define project and table IDs
+    # 2) Define table IDs
     project_id = "docusign-475113"
     dataset_id = "customdocusignconnector"
-    
-    source_table_id = f"{project_id}.{dataset_id}.document_contents"
-    dest_table_name = "document_embeddings_test" # Just the table name
-    dest_table_id = f"{project_id}.{dataset_id}.{dest_table_name}" # Full ID
-    
-    # 3. Define the query to fetch all documents
-    #    REMOVED 'LIMIT 1' TO PROCESS ALL DOCUMENTS
+    table_name = "document_contents"
+    table_id = f"{project_id}.{dataset_id}.{table_name}"
+
+    # 3) Ensure schema has content_text column
+    ensure_content_text_column(client, table_id)
+
+    # 4) Determine the correct base64 column name (content_base64 vs content_base_64)
+    base64_col = get_base64_column_name(client, table_id)
+    if not base64_col:
+        print(f"❌ Neither 'content_base64' nor 'content_base_64' column found on {table_id}. Exiting.")
+        raise SystemExit(1)
+
+    # 5) Fetch only rows that still need processing
     query = f"""
-        SELECT envelope_id, document_id, content_base_64 
-        FROM `{source_table_id}` 
-        WHERE content_base_64 IS NOT NULL
+        SELECT envelope_id, document_id, {base64_col} AS content_base64
+        FROM `{table_id}`
+        WHERE (content_text IS NULL OR content_text = '')
+          AND {base64_col} IS NOT NULL
+          AND {base64_col} != ''
     """
-    
-    print(f"Running query to fetch documents from: {source_table_id}")
-    
-    # 4. Initialize the text splitter ONCE
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=300,  # Increased size slightly, 200 is very small
-        chunk_overlap=30,
-        length_function=len,
-    )
+
+    print(f"Running query to fetch documents needing text extraction from: {table_id} (base64 column: {base64_col})")
 
     try:
         query_job = client.query(query)
-        
-        # Loop through ALL documents in the source table
+
+        # Loop through documents that need processing
         for row in query_job:
-            doc_info = {"envelope_id": row["envelope_id"], "document_id": row["document_id"]}
-            print(f"\nProcessing document: {doc_info['envelope_id']} / {doc_info['document_id']}")
+            env_id = row["envelope_id"]
+            doc_id = row["document_id"]
+            encoded_field = row["content_base64"]
 
-            # **FIXED LOGIC**: Check if doc exists in the DESTINATION table
-            exists = check_if_doc_exists_in_embeddings(
-                client, 
-                dest_table_id, 
-                doc_info["envelope_id"], 
-                doc_info["document_id"]
-            )
-            
-            if exists:
-                print("   -> Document already processed. Skipping.")
-                continue
-            
-            # --- This is the main "Transform" and "Load" block ---
-            print("   -> New document. Processing...")
-            document_text = ""
-            encoded_string = row["content_base_64"]
-            
-            if not encoded_string:
-                print("   -> Skipping: No content_base_64 data found.")
+            print(f"\nProcessing document: {env_id} / {doc_id}")
+
+            # Extra safety: skip if already processed
+            if is_document_processed(client, table_id, env_id, doc_id):
+                print("   -> Already processed. Skipping.")
                 continue
 
+            if not encoded_field:
+                print("   -> Skipping: No content_base64 data found.")
+                continue
+
+            # Decode to raw PDF bytes; handle BYTES column as already-bytes
             try:
-                pdf_bytes = base64.b64decode(encoded_string)
-                document_text = extract_text_from_binary(pdf_bytes)
-                if "Error" in document_text:
-                    print(f"   -> Skipping: Error during text extraction: {document_text}")
-                    continue
-                print("   -> Text extracted successfully.")
+                if isinstance(encoded_field, (bytes, bytearray)):
+                    pdf_bytes = bytes(encoded_field)
+                else:
+                    pdf_bytes = base64.b64decode(encoded_field, validate=False)
             except (binascii.Error, Exception) as e:
-                print(f"   -> Skipping: Error during base64 decode or text extraction: {e}")
+                print(f"   -> Skipping: base64 decode failed: {e}")
                 continue
 
-            # 5. Chunk the text
-            chunks = text_splitter.split_text(document_text) 
-            if not chunks:
-                print("   -> Skipping: No text chunks found after splitting.")
+            # Extract text
+            text = extract_text_from_binary(pdf_bytes)
+            if text.startswith("Error processing PDF data:"):
+                print(f"   -> Skipping: {text}")
                 continue
-            
-            print(f"   -> Document split into {len(chunks)} chunks. Generating embeddings...")
 
-            # 6. Generate embeddings
+            if not text.strip():
+                print("   -> Skipping: No text extracted from document.")
+                continue
+
+            # Update row: set content_text and clear base64
             try:
-                result = genai.embed_content(
-                    model="models/embedding-001",
-                    content=chunks,
-                    task_type="RETRIEVAL_DOCUMENT"
+                update_document_text_and_clear_base64(
+                    client,
+                    table_id,
+                    env_id,
+                    doc_id,
+                    text,
+                    base64_col,
                 )
-                
-                # Map chunks to their embeddings
-                word_embeddings = {chunk: embedding for chunk, embedding in zip(chunks, result['embedding'])}
-                print("   -> Embeddings generated.")
-
-                # 7. Prepare and load data into BigQuery
-                rows_to_insert = []
-                for i, (chunk, embedding) in enumerate(word_embeddings.items()):
-                    rows_to_insert.append({
-                        "envelope_id": doc_info["envelope_id"],
-                        "document_id": doc_info["document_id"],
-                        "chunk_id": i,
-                        "text_chunk": chunk,
-                        "embedding": embedding
-                    })
-                
-                push_embeddings_to_bigquery(
-                    client, 
-                    project_id, 
-                    dataset_id, 
-                    dest_table_name, 
-                    rows_to_insert
-                )
+                print("   -> Updated content_text and cleared base64 bytes.")
             except Exception as e:
-                print(f"   -> Skipping: Failed to generate or push embeddings: {e}")
+                print(f"   -> Failed to update row: {e}")
 
     except Exception as e:
         print(f"An error occurred while querying BigQuery: {e}")
 
-    print("\n--- Pipeline execution complete. ---")
+    print("\n--- Text extraction pipeline execution complete. ---")

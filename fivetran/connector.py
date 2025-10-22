@@ -83,14 +83,7 @@ SCHEMA_DEFINITION: List[Dict[str, Any]] = [
             " archiving or content classification pipelines in BigQuery."
         ),
     },
-    {
-        "table": "document_tabs",
-        "primary_key": ["envelope_id", "document_id", "tab_id"],
-        "description": (
-            "Flattened DocuSign tab placements tying each field capture to a document and"
-            " recipient, ideal for operational reporting on form completion."
-        ),
-    },
+
     {
         "table": "templates",
         "primary_key": ["template_id"],
@@ -507,31 +500,6 @@ def fetch_custom_fields_for_envelope(configuration: dict, envelope_id: str) -> L
         return custom_fields
     except Exception as e:
         logger.warning(f"Could not fetch custom fields for envelope {envelope_id}: {e}")
-        return []
-
-## FIX: Corrected API endpoint and processing logic for fetching tabs.
-def fetch_document_tabs_for_envelope(configuration: dict, envelope_id: str) -> List[Dict[str, Any]]:
-    """
-    Fetch document tabs for a specific envelope.
-    """
-    base_url = get_base_url(configuration)
-    headers = get_docusign_headers(configuration)
-    url = f"{base_url}/envelopes/{envelope_id}/tabs"
-    
-    try:
-        data = make_api_request(url, headers)
-        tabs = []
-        
-        for tab_type, tab_list in data.items():
-            if isinstance(tab_list, list):
-                for tab in tab_list:
-                    tab["envelope_id"] = envelope_id
-                    tab["tab_type"] = tab_type
-                    tabs.append(tab)
-        
-        return tabs
-    except Exception as e:
-        logger.warning(f"Could not fetch tabs for envelope {envelope_id}: {e}")
         return []
 
 
