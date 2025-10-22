@@ -184,6 +184,7 @@ def _refresh_access_token(configuration: dict) -> str:
         jwt_assertion = jwt_assertion.decode("utf-8")
 
     token = _exchange_jwt_for_access_token(configuration["oauth_base_url"], jwt_assertion)
+    print(token)
     configuration["access_token"] = token
     return token
 
@@ -192,7 +193,6 @@ def _mask_token(token: str, visible_characters: int = 6) -> str:
     if not token:
         return ""
     return f"...{token[-visible_characters:]}" if len(token) > visible_characters else token
-
 
 
 def schema(configuration: dict):
@@ -540,6 +540,7 @@ def update(configuration: dict, state: Dict[str, Any]):
             "created_timestamp": str(envelope.get("createdDateTime", "")),
             "last_modified_timestamp": str(envelope.get("statusChangedDateTime", "")),
             "subject": str(envelope.get("emailSubject", "")),
+            "expire_after": str(envelope.get("expireAfter", "")),
             "contract_cycle_time_hours": "",
             "conversion_status": str(envelope.get("status", ""))
         }
