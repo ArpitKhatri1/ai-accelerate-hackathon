@@ -37,9 +37,7 @@ const AppSidebar = () => {
         <Sidebar className='' collapsible='icon' >
             <SidebarContent >
                 <SidebarGroup>
-                    <SidebarGroupLabel>Navigation
-                    
-                    </SidebarGroupLabel>
+
                     <SidebarGroupContent>
 
                         <SidebarMenu>

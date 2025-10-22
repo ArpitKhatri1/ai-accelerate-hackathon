@@ -32,7 +32,7 @@ export function useLocalStorageCache<T>(key: string, initialValue: T, ttlMs: num
     } finally {
       setIsHydrated(true)
     }
-  }, [key, initialValue])
+  }, [key]) // Removed initialValue from dependencies
 
   const isFresh = useMemo(() => {
     if (!entry) return false

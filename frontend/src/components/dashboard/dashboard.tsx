@@ -63,7 +63,7 @@ const Dashboard = () => {
   return (
     <div className='mt-4 '>
       <div className='text-2xl mb-3  font-bold'>
-        Your Campain Metrics
+        Your Campaign Metrics
       </div>
       <div className="flex gap-6 mb-6 ">
         {cards.map((card) => (
@@ -86,7 +86,9 @@ const Dashboard = () => {
       <div className="mb-6">
         <EnvelopeTypeCycleChart />
       </div>
-      <EnvelopesTable />
+      <div className="mb-10">
+        <EnvelopesTable />
+      </div>
     </div>
   )
 }

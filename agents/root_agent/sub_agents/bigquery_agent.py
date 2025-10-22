@@ -21,6 +21,7 @@ Columns:
 - `completed_timestamp` (TIMESTAMP): Date/time the envelope reached a completed state.
 - `created_timestamp` (TIMESTAMP): Date/time the envelope was created.
 - `last_modified_timestamp` (TIMESTAMP): Most recent status change timestamp.
+- `expire_after` (INTEGER): No of Days after which the envelope expires. Use this + created_timestamp to calculate expiration date.
 - `subject` (STRING): Email subject line associated with the envelope.
 - `contract_cycle_time_hours` (FLOAT): Hours between sent and completed timestamps.
 - `conversion_status` (STRING): Mirrors DocuSign status for downstream analytics.
@@ -89,7 +90,7 @@ Columns:
 
 # --- SERVICE ACCOUNT CONFIGURATION ---
 SERVICE_ACCOUNT_FILE = os.path.abspath(
-    os.path.join(os.path.dirname(__file__), "../../docusign-475113-4054c4d08fa3-python-runner-service.json")
+    os.path.join(os.path.dirname(__file__), "./../../docusign-arpit.json")
 )
 
 if not os.path.exists(SERVICE_ACCOUNT_FILE):

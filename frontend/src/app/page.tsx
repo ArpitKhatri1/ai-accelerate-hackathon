@@ -29,9 +29,9 @@ export default function Home() {
   return (
     <div
       ref={backgroundColorRef}
-      className="relative w-full min-h-screen bg-white"
+      className="relative w-full min-h-screen  pb-1  "
     >
-      <div ref={dashboardRef} className="relative z-10 h-full">
+      <div ref={dashboardRef} className="relative z-10 h-full mb-1">
         <Dashboard />
       </div>
 

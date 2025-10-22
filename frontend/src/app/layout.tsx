@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Roboto, JetBrains_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "@/components/Navbar";
 
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import AppSidebar from "@/components/Sidebar";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const roboto = Roboto({
+  variable: "--font-roboto",
   subsets: ["latin"],
 });
 
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
+const jetbrainsMono = JetBrains_Mono({
+  variable: "--font-jetbrains-mono",
   subsets: ["latin"],
 });
 
@@ -29,7 +29,7 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-screen w-screen overflow-x-hidden">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased h-full w-full`}
+        className={`${roboto.variable} ${jetbrainsMono.variable} antialiased h-full w-full`}
       >
         <div className="flex flex-col h-full">
           {/* ✅ Navbar fixed at the top */}
@@ -45,9 +45,9 @@ export default function RootLayout({
 
 
               {/* Main content area */}
-              <main className="overflow-x-hidden">
+              <main className="overflow-x-hidden ">
                 {/* <SidebarTrigger /> */}
-                <div className='flex justify-center h-screen w-screen overflow-y-scroll bg-white relative'>
+                <div className='flex justify-center h-screen w-screen overflow-y-scroll relative bg-gradient-to-br from-sky-100 via-white to-sky-200'>
                   <div className='max-w-[1200px] w-full'>
                     {children}
                   </div>

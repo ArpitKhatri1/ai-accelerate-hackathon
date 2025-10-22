@@ -261,10 +261,10 @@ const PromptInputComponent = () => {
 
   return (
     // Use layout from new code
-    <div className="flex flex-col w-full justify-end  bg-white h-fit rounded-lg">
+    <div className="flex flex-col w-full h-full rounded-lg bg-white">
       {/* Use message rendering from new code */}
-      <div className="p-4 space-y-4 overflow-y-auto w-full">
-        {messages.map((msg, i) => (
+      <div className="flex-1 p-4 space-y-4 overflow-y-auto w-full flex flex-col-reverse">
+        {[...messages].reverse().map((msg, i) => (
           <div
             key={i}
             className={`flex ${
@@ -311,8 +311,9 @@ const PromptInputComponent = () => {
         ))}
       </div>
 
-      {/* Use PromptInput structure from old code */}
-      <PromptInput globalDrop multiple onSubmit={handleSubmit}>
+      {/* Use PromptInput structure from old code - Now at bottom */}
+      <div className="border-t bg-white">
+        <PromptInput globalDrop multiple onSubmit={handleSubmit}>
         <PromptInputBody>
           <PromptInputAttachments>
             {(attachment) => <PromptInputAttachment data={attachment} />}
@@ -358,6 +359,7 @@ const PromptInputComponent = () => {
           <PromptInputSubmit className="!h-8" status={status} />
         </PromptInputFooter>
       </PromptInput>
+      </div>
     </div>
   );
 };
