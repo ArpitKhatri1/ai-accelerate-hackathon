@@ -54,7 +54,7 @@ export function KPICard({
   };
 
   return (
-    <Card className={cn('relative group hover:shadow-lg transition-shadow duration-200 ', onOpenInsight && 'focus-within:shadow-lg')}>
+    <Card className={cn('relative group hover:shadow-lg transition-shadow duration-200   ', onOpenInsight && 'focus-within:shadow-lg')}>
       {onOpenInsight && (
         <button
           type="button"

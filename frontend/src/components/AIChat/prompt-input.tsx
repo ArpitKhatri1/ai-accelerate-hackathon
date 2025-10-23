@@ -31,6 +31,48 @@ import remarkGfm from 'remark-gfm';
 import { ChatChartRenderer } from './ChatChartRenderer';
 import type { AgentMessageContent } from '@/lib/agent-types';
 import { normalizeStructuredPayload } from '@/lib/agent-response';
+// import * as pdfjsLib from 'pdfjs-dist'; // Removed top-level import
+
+// Configure PDF.js worker - moved to function level
+// if (typeof window !== 'undefined') {
+//   pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// }
+
+// Function to extract text from PDF files
+async function extractTextFromPDF(fileUIPart: { url: string; filename?: string }): Promise<string> {
+  try {
+    // Dynamically import PDF.js to avoid SSR issues
+    const pdfjsLib = await import('pdfjs-dist');
+
+    // Configure worker only when needed
+    if (typeof window !== 'undefined') {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+    }
+
+    // Fetch the blob from the URL
+    const response = await fetch(fileUIPart.url);
+    const blob = await response.blob();
+    const file = new File([blob], fileUIPart.filename || 'document.pdf', { type: 'application/pdf' });
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = '';
+
+    for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
+      const page = await pdf.getPage(pageNum);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items
+        .map((item) => ('str' in item ? item.str : ''))
+        .join(' ');
+      fullText += `Page ${pageNum}:\n${pageText}\n\n`;
+    }
+
+    return fullText.trim();
+  } catch (error) {
+    console.error('Error extracting text from PDF:', error);
+    return `Error extracting text from ${fileUIPart.filename || 'PDF file'}: ${error instanceof Error ? error.message : 'Unknown error'}`;
+  }
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -101,10 +143,28 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
 
     setStatus('submitted');
 
+    // Process PDF files and extract text
+    let combinedText = message.text || '';
+    if (hasAttachments && message.files) {
+      const pdfFiles = message.files.filter(file => file.mediaType === 'application/pdf');
+      if (pdfFiles.length > 0) {
+        combinedText += '\n\n--- USER FILE ATTACHMENTS ---\n';
+        for (const file of pdfFiles) {
+          try {
+            const extractedText = await extractTextFromPDF(file);
+            combinedText += `\n## ${file.filename}\n${extractedText}\n`;
+          } catch (error) {
+            console.error(`Failed to process PDF ${file.filename}:`, error);
+            combinedText += `\n## ${file.filename}\nError: Failed to extract text from PDF file.\n`;
+          }
+        }
+      }
+    }
+
     const userMessage: ChatMessage = {
       role: 'user',
       content: {
-        text: message.text || '',
+        text: combinedText,
       },
     };
 
