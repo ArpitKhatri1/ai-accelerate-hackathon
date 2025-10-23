@@ -31,6 +31,27 @@ import remarkGfm from 'remark-gfm';
 import { ChatChartRenderer } from './ChatChartRenderer';
 import type { AgentMessageContent } from '@/lib/agent-types';
 import { normalizeStructuredPayload } from '@/lib/agent-response';
+import pdfToText from 'react-pdftotext';
+
+// Extract text from a PDF attachment (FileUIPart) using react-pdftotext
+async function extractPdfTextFromAttachment(file: { url: string; filename?: string; mediaType?: string }) {
+  try {
+    if (file.mediaType !== 'application/pdf') return null;
+
+    // Fetch the blob from the FileUIPart URL
+    const res = await fetch(file.url);
+    const blob = await res.blob();
+
+    // Use react-pdftotext to extract text
+    const text = await pdfToText(blob);
+    const header = `USER FILE ATTACHMENT: ${file.filename ?? 'document.pdf'}`;
+    return `${header}\n\n${text.trim()}`;
+  } catch (err) {
+    console.error('[AIChat] Failed to extract PDF text', err);
+    const header = `USER FILE ATTACHMENT: ${file.filename ?? 'document.pdf'}`;
+    return `${header}\n\n<Failed to extract text from this PDF>`;
+  }
+}
 
 interface ChatMessage {
   role: 'user' | 'assistant';
@@ -99,12 +120,43 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
       return;
     }
 
+    // Build final outgoing text, augmenting with extracted PDF text (if any),
+    // while keeping the UI display concise.
+    let outgoingText = message.text || '';
+    let uiAttachmentLine = '';
+    let attachedFileNames: string[] = [];
+    if (message.files && message.files.length > 0) {
+      const pdfParts = message.files.filter((f) => f.mediaType === 'application/pdf');
+      if (pdfParts.length > 0) {
+        attachedFileNames = pdfParts.map((f) => (f as { filename?: string }).filename || 'document.pdf');
+        const extractedAll = await Promise.all(
+          pdfParts.map((f) =>
+            extractPdfTextFromAttachment({
+              url: f.url,
+              filename: (f as { filename?: string }).filename,
+              mediaType: f.mediaType,
+            })
+          )
+        );
+        const joined = extractedAll.filter(Boolean).join('\n\n');
+        if (joined.trim().length > 0) {
+          outgoingText = `${outgoingText ? outgoingText + '\n\n' : ''}${joined}`;
+        }
+
+        // Create a short UI summary line listing the PDF names
+        const names = attachedFileNames.join(', ');
+        uiAttachmentLine = `Attached PDF${attachedFileNames.length > 1 ? 's' : ''}: ${names} (full contents sent to assistant).`;
+      }
+    }
+
     setStatus('submitted');
 
     const userMessage: ChatMessage = {
       role: 'user',
       content: {
-        text: message.text || '',
+        // Show a concise message in the UI, but keep the full text hidden in `raw`
+        text: [message.text || '', uiAttachmentLine].filter(Boolean).join('\n\n') || undefined,
+        raw: outgoingText,
       },
     };
 
@@ -122,7 +174,7 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: message.text || '',
+          message: outgoingText,
           history: historyPayload,
         }),
       });
