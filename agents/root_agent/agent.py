@@ -4,6 +4,7 @@ from .sub_agents.bigquery_agent import bigquery_agent
 from .sub_agents.chart_agent import chart_agent
 from .sub_agents.legal_agent import contract_risk_agent
 from .sub_agents.reminder_agent import rem_agent
+from .sub_agents.sales_agent import sales_agent, document_retrieval_tool
 import os
 root_agent = Agent(
     model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
@@ -40,16 +41,20 @@ You MUST return your final answer as a single JSON object wrapped in a Markdown 
 1. When the user needs quantitative data or charts, call `chart_agent`. Request every required chart in a **single** `chart_agent` call, then copy its JSON `charts` array directly into your response.
 2. Only call `bigquery_agent` directly when charts are not required or when you need table-level detail that cannot be inferred from the chart data you already have. Prefer basing your narrative on the chart data instead of launching another query.
 3. For sending reminders to expiring DocuSign envelopes, call `reminder_agent` with the number of days until expiration.
-4. For general questions that do not need data, respond with only the `text` field.
-5. If both textual explanation and charts are useful, include both—but derive the explanation from the chart data whenever possible rather than issuing extra queries.
+4. For sales analysis, contract insights, or document retrieval, call `sales_agent` to analyze customer data and retrieve relevant document information.
+5. For direct document search and retrieval from embedded documents, use the `document_retrieval_tool` to search through document embeddings for relevant information.
+6. For general questions that do not need data, respond with only the `text` field.
+7. If both textual explanation and charts are useful, include both—but derive the explanation from the chart data whenever possible rather than issuing extra queries.
+8. While looking for content inside the document try to use the `document_retrieval_tool` to find relevant sections based on the query instead of querying the entire document content using content_text inside document_contents table.
 
 ⚙️ **Efficiency pledge**
 
 - Plan briefly before using any tool and minimise tool invocations.
 - Do not call the same tool multiple times in one turn unless absolutely necessary; batch requests into a single invocation whenever you can.
 - Assume dataset consistency across tools and reuse results you already have instead of re-querying.
+- Return comprehensive answers and why did you come to that conclusion that fully address the user's needs in one response whenever possible.
 
 ❗ **Never** return plain text outside the fenced JSON block, and never return multiple JSON objects.
 ''',
-    tools=[AgentTool(agent=bigquery_agent), AgentTool(agent=chart_agent), AgentTool(agent=contract_risk_agent), AgentTool(agent=rem_agent)]
+    tools=[AgentTool(agent=bigquery_agent), AgentTool(agent=chart_agent), AgentTool(agent=contract_risk_agent), AgentTool(agent=rem_agent), AgentTool(agent=sales_agent), document_retrieval_tool]
 )

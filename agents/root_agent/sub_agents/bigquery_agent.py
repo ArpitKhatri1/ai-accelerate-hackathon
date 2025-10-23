@@ -69,7 +69,7 @@ Table `document_contents` — Base64-encoded document payloads.
 Columns:
 - `envelope_id` (STRING, FK): Parent envelope identifier.
 - `document_id` (STRING, PK segment): Document identifier.
-- `content_base64` (BYTES/STRING): Base64 string for the original document bytes.
+- `content_text` (STRING): Contains plain-text content of entire document for search and analysis.
 
 Table `templates` — Reusable DocuSign template registry.
 Columns:
