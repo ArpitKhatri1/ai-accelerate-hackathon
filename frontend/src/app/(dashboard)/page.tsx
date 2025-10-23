@@ -35,19 +35,7 @@ export default function Home() {
         <Dashboard />
       </div>
 
-      {/* <div className="pointer-events-none absolute bottom-16 right-16 z-20 flex items-center gap-3">
-        <span className="pointer-events-auto inline-flex items-center rounded-full bg-slate-900 px-4 py-2 text-sm font-medium text-white shadow-lg shadow-slate-900/40">
-          Chat with AI
-        </span>
-        <button
-          type="button"
-          onClick={handleChatClick}
-          aria-label="Open AI chat"
-          className="pointer-events-auto flex h-14 w-14 items-center justify-center rounded-full bg-blue-600 text-white shadow-lg shadow-blue-600/40 transition hover:bg-blue-500 focus-visible:ring-2 focus-visible:ring-blue-400 focus-visible:ring-offset-2"
-        >
-          💬
-        </button>
-      </div> */}
+  
     </div>
   );
 }

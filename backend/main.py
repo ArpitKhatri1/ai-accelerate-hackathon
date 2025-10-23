@@ -143,26 +143,18 @@ async def get_dashboard_kpis():
 async def get_cycle_time_by_document(limit: int = 6):
     limit = max(1, min(limit, 25))
     query = f"""
-        WITH doc_type AS (
-            SELECT
-                envelope_id,
-                -- normalize common keys and trim/upper the value
-                UPPER(TRIM(value)) AS document_type
-            FROM {CUSTOM_FIELDS_TABLE}
-            WHERE LOWER(field_name) IN (
-                'document_type', 'documenttype', 'doc_type', 'doctype'
-            )
-        )
         SELECT
-            COALESCE(NULLIF(doc_type.document_type, ''), 'Unknown') AS document_type,
-            SAFE_DIVIDE(AVG(envelope.contract_cycle_time_hours), 24.0) AS avg_cycle_days
-        FROM {ENVELOPES_TABLE} AS envelope
-        LEFT JOIN doc_type
-            ON doc_type.envelope_id = envelope.envelope_id
+            COALESCE(NULLIF(cf.value, ''), 'Unknown') AS envelope_type,
+            AVG(envelope.contract_cycle_time_hours) AS avg_cycle_hours
+        FROM {CUSTOM_FIELDS_TABLE} AS cf
+        LEFT JOIN {ENVELOPES_TABLE} AS envelope
+            ON cf.envelope_id = envelope.envelope_id
         WHERE envelope.contract_cycle_time_hours IS NOT NULL
-        GROUP BY document_type
-        HAVING avg_cycle_days IS NOT NULL AND document_type IS NOT NULL
-        ORDER BY avg_cycle_days DESC
+          AND cf.value IS NOT NULL
+          AND TRIM(cf.value) != ''
+        GROUP BY cf.value
+        HAVING avg_cycle_hours IS NOT NULL
+        ORDER BY avg_cycle_hours DESC
         LIMIT @limit
     """
 
@@ -176,15 +168,15 @@ async def get_cycle_time_by_document(limit: int = 6):
 
     items = []
     for row in rows:
-        doc_type = (row.get("document_type") or "").strip()
-        if not doc_type:
-            doc_type = "Unknown"
-        avg_days_val = row.get("avg_cycle_days")
-        if avg_days_val is None:
+        envelope_type = (row.get("envelope_type") or "").strip()
+        if not envelope_type:
+            envelope_type = "Unknown"
+        avg_hours_val = row.get("avg_cycle_hours")
+        if avg_hours_val is None:
             continue
         items.append({
-            "type": doc_type.title(),
-            "avgDays": round(float(avg_days_val or 0.0), 2),
+            "type": envelope_type.title(),
+            "avgHours": round(float(avg_hours_val), 2),
         })
 
     return {"items": items}

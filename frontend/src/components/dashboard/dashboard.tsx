@@ -65,7 +65,7 @@ const Dashboard = () => {
       <div className='text-2xl mb-3  font-bold'>
         Your Campaign Metrics
       </div>
-      <div className="flex gap-6 mb-6 ">
+      <div className="grid grid-cols-3 gap-6 mb-6 ">
         {cards.map((card) => (
           <KPICard
             key={card.title}

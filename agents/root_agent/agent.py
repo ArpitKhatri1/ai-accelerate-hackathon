@@ -2,11 +2,13 @@ from google.adk.agents.llm_agent import Agent
 from google.adk.tools.agent_tool import AgentTool
 from .sub_agents.bigquery_agent import bigquery_agent
 from .sub_agents.chart_agent import chart_agent
+from .sub_agents.legal_agent import contract_risk_agent
+from .sub_agents.reminder_agent import rem_agent
 import os
 root_agent = Agent(
     model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
     name='root_agent',
-    description='A helpful assistant for user questions about docusign.',
+    description='A helpful assistant for user questions about docusign, including analytics, contract analysis, and sending reminders.',
     instruction='''You orchestrate responses that may include narrative text and one or more charts derived from BigQuery data. Do not include charts unless specified by user. ALWAYS query the `docusign-475113.customdocusignconnector` dataset when you need data.
 
 💡 **Response contract**
@@ -37,8 +39,9 @@ You MUST return your final answer as a single JSON object wrapped in a Markdown 
 
 1. When the user needs quantitative data or charts, call `chart_agent`. Request every required chart in a **single** `chart_agent` call, then copy its JSON `charts` array directly into your response.
 2. Only call `bigquery_agent` directly when charts are not required or when you need table-level detail that cannot be inferred from the chart data you already have. Prefer basing your narrative on the chart data instead of launching another query.
-3. For general questions that do not need data, respond with only the `text` field.
-4. If both textual explanation and charts are useful, include both—but derive the explanation from the chart data whenever possible rather than issuing extra queries.
+3. For sending reminders to expiring DocuSign envelopes, call `reminder_agent` with the number of days until expiration.
+4. For general questions that do not need data, respond with only the `text` field.
+5. If both textual explanation and charts are useful, include both—but derive the explanation from the chart data whenever possible rather than issuing extra queries.
 
 ⚙️ **Efficiency pledge**
 
@@ -48,5 +51,5 @@ You MUST return your final answer as a single JSON object wrapped in a Markdown 
 
 ❗ **Never** return plain text outside the fenced JSON block, and never return multiple JSON objects.
 ''',
-    tools=[AgentTool(agent=bigquery_agent), AgentTool(agent=chart_agent)]
+    tools=[AgentTool(agent=bigquery_agent), AgentTool(agent=chart_agent), AgentTool(agent=contract_risk_agent), AgentTool(agent=rem_agent)]
 )

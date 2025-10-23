@@ -39,6 +39,7 @@ import { TEXT_INSIGHT_META } from './widget-metadata'
 interface DashboardBuilderProps {
   onSave: (dashboard: Omit<AnalyticsDashboard, 'id' | 'createdAt'>) => void
   onCancel: () => void
+  initialDashboard?: Omit<AnalyticsDashboard, 'id' | 'createdAt'>
 }
 
 const chartPaletteTypes: ChartVisualizationType[] = ['bar', 'double-bar', 'line', 'pie']
@@ -232,10 +233,10 @@ function Canvas({ children }: { children: React.ReactNode }) {
   )
 }
 
-export function DashboardBuilder({ onSave, onCancel }: DashboardBuilderProps) {
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [widgets, setWidgets] = useState<DashboardWidget[]>([])
+export function DashboardBuilder({ onSave, onCancel, initialDashboard }: DashboardBuilderProps) {
+  const [name, setName] = useState(initialDashboard?.name || '')
+  const [description, setDescription] = useState(initialDashboard?.description || '')
+  const [widgets, setWidgets] = useState<DashboardWidget[]>(initialDashboard?.charts || [])
 
   const sensors = useSensors(
     useSensor(PointerSensor, {

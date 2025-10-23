@@ -261,7 +261,7 @@ const PromptInputComponent = () => {
 
   return (
     // Use layout from new code
-    <div className="flex flex-col w-full h-full rounded-lg bg-white">
+    <div className="flex flex-col  w-full h-[80vh] rounded-lg bg-white">
       {/* Use message rendering from new code */}
       <div className="flex-1 p-4 space-y-4 overflow-y-auto w-full flex flex-col-reverse">
         {[...messages].reverse().map((msg, i) => (

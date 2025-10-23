@@ -10,15 +10,15 @@ import { useLocalStorageCache } from "@/hooks/use-local-storage-cache";
 
 // Config for the vertical bar chart (avg cycle time)
 const envelopeTypeConfig = {
-  avgDays: {
-    label: "Avg Days",
+  avgHours: {
+    label: "Avg Hours",
     color: "hsl(217, 91%, 60%)",
   },
 } satisfies ChartConfig;
 
 type CycleTimeItem = {
   type: string;
-  avgDays: number;
+  avgHours: number;
 };
 
 export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
@@ -58,7 +58,7 @@ export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
     () =>
       items.map((item) => ({
         type: item.type,
-        avgDays: Number.isFinite(item.avgDays) ? Number(item.avgDays) : 0,
+        avgHours: Number.isFinite(item.avgHours) ? Number(item.avgHours) : 0,
       })),
     [items]
   );
@@ -69,7 +69,7 @@ export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
     <Card className={className}>
       <CardHeader>
         <CardTitle>Average Contract Cycle Time by Envelope Type</CardTitle>
-        <CardDescription>Average time to completion by document type</CardDescription>
+        <CardDescription>Average time to completion by envelope type (in hours)</CardDescription>
       </CardHeader>
       <CardContent>
         {isLoading ? (
@@ -100,12 +100,12 @@ export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
                   <ChartTooltipContent
                     indicator="line"
                     formatter={(value) =>
-                      typeof value === "number" ? `${value.toFixed(2)} days` : `${value} days`
+                      typeof value === "number" ? `${value.toFixed(2)} hours` : `${value} hours`
                     }
                   />
                 }
               />
-              <Bar dataKey="avgDays" fill="var(--color-avgDays)" radius={4} />
+              <Bar dataKey="avgHours" fill="var(--color-avgHours)" radius={4} />
             </RechartsBarChart>
           </ChartContainer>
         )}

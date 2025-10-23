@@ -43,7 +43,7 @@ export interface DashboardKpisResponse {
 
 export interface CycleTimeItem {
   type: string;
-  avgDays: number;
+  avgHours: number;
 }
 
 export interface CycleTimeResponse {
