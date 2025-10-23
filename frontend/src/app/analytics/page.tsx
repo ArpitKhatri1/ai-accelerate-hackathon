@@ -171,7 +171,7 @@ export default function AnalyticsPage() {
                 Drag widgets, write prompts, and let the agents render charts or insights when the dashboard loads.
               </p>
             </div>
-            <Button onClick={() => setBuilderOpen(true)}>
+            <Button onClick={() => setBuilderOpen(true)} className='bg-blue-500 font-bold'>
               <PlusCircle className="mr-2 h-4 w-4" /> New dashboard
             </Button>
           </header>
@@ -214,7 +214,7 @@ export default function AnalyticsPage() {
                       variant="outline"
                       size="sm"
                       onClick={() => openDeleteDialog(dashboard)}
-                      className="border-destructive/30 text-destructive hover:bg-destructive/10"
+                      className="border-destructive/30 text-destructive hover:bg-destructive/10 bg-red-100"
                     >
                       <Trash2 className="h-4 w-4" />
                     </Button>

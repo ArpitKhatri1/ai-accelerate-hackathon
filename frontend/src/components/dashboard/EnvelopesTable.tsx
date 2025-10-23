@@ -1,11 +1,14 @@
 "use client";
 
 import React, { useEffect, useMemo, useState } from 'react';
+import { Star } from 'lucide-react';
 import { analyticsApi, EnvelopesTableItem, EnvelopesTableResponse } from '@/lib/analytics-api';
 import { useLocalStorageCache } from '@/hooks/use-local-storage-cache';
+import { DashboardInsightPayload } from './insights';
 
 type Props = {
   className?: string;
+  onOpenInsight?: (payload: DashboardInsightPayload) => void;
 };
 
 function classNames(...parts: (string | false | null | undefined)[]) {
@@ -21,7 +24,7 @@ const statusStyles: Record<string, string> = {
   unknown: 'bg-gray-100 text-gray-700 ring-1 ring-inset ring-gray-400/40',
 };
 
-export const EnvelopesTable: React.FC<Props> = ({ className }) => {
+export const EnvelopesTable: React.FC<Props> = ({ className, onOpenInsight }) => {
   const [isLoading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [page, setPage] = useState(1);
@@ -71,8 +74,25 @@ export const EnvelopesTable: React.FC<Props> = ({ className }) => {
     setPage(1); // reset to first page
   }
 
+  const handleRowInsightClick = (row: EnvelopesTableItem) => {
+    if (!onOpenInsight) return;
+
+    const summary = `Envelope ${row.envelopeId}: ${row.name || 'Unnamed'}, status ${row.status}, sent ${row.sentDate ? new Date(row.sentDate).toLocaleDateString() : '—'}, completed ${row.completedDate ? new Date(row.completedDate).toLocaleDateString() : '—'}, recipients: ${row.recipients || '—'}.`;
+
+    onOpenInsight({
+      title: `Envelope: ${row.name || row.envelopeId}`,
+      summary,
+      data: row,
+      metadata: {
+        component: 'envelopes-table-row',
+        envelopeId: row.envelopeId,
+        status: row.status,
+      },
+    });
+  };
+
   return (
-    <div className={classNames('rounded-xl border border-gray-200 bg-white shadow-sm', className)}>
+    <div className={classNames('relative rounded-xl border border-gray-200 bg-white shadow-sm', className)}>
       <div className="flex flex-col gap-4 border-b border-gray-100 p-6 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h3 className="text-lg font-semibold text-gray-900">Recent Envelopes</h3>
@@ -161,7 +181,7 @@ export const EnvelopesTable: React.FC<Props> = ({ className }) => {
               </tr>
             )}
             {!isLoading && !error && data && data.items.map((row: EnvelopesTableItem) => (
-              <tr key={row.envelopeId} className="transition-colors hover:bg-blue-50/30">
+              <tr key={row.envelopeId} className="relative group transition-colors hover:bg-blue-50/30">
                 <td className="whitespace-nowrap px-6 py-4">
                   <div className="flex flex-col gap-1">
                     <span className="text-sm font-semibold text-gray-900">{row.name || '—'}</span>
@@ -182,6 +202,16 @@ export const EnvelopesTable: React.FC<Props> = ({ className }) => {
                     {row.status.charAt(0).toUpperCase() + row.status.slice(1)}
                   </span>
                 </td>
+                {onOpenInsight && (
+                  <button
+                    type="button"
+                    onClick={() => handleRowInsightClick(row)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-full bg-white/95 p-2 text-amber-500 shadow-lg transition-all duration-200 hover:scale-105 hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 opacity-0 group-hover:opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+                    aria-label="Ask AI about this envelope"
+                  >
+                    <Star className="h-4 w-4" />
+                  </button>
+                )}
               </tr>
             ))}
           </tbody>

@@ -25,16 +25,17 @@ const AppSidebar = () => {
             url: "/",
             icon: Home,
         },
+           {
+            title: "AI Chat",
+            url: "/ai-chat",
+            icon: MessageCircle,
+        },
         {
             title: "Analytics WorkFlow",
             url: "/analytics",
             icon: Inbox,
         },
-        {
-            title: "AI Chat",
-            url: "/ai-chat",
-            icon: MessageCircle,
-        },
+     
      
     ]
     return (
@@ -52,7 +53,7 @@ const AppSidebar = () => {
                                     console.log("isActive", item.url, pathname, isActive)
                                 return (
                                     <SidebarMenuItem key={item.title} className=''>
-                                        <SidebarMenuButton asChild className={isActive ? "  bg-blue-400 text-white hover:bg-blue-400/90 hover:text-white rounded-md" : "" }>
+                                        <SidebarMenuButton asChild className={isActive ? "  bg-blue-500 text-white hover:bg-blue-500/90 hover:text-white rounded-md" : "" }>
                                             <Link href={item.url}>
                                                 <item.icon className={isActive ? "text-white" : ""} />
                                                 <span>{item.title}</span>

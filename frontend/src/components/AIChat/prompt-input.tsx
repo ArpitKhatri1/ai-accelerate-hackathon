@@ -24,7 +24,7 @@ import {
   PromptInputTools,
 } from '@/components/ai-elements/prompt-input';
 import { GlobeIcon } from 'lucide-react';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 
@@ -35,6 +35,11 @@ import { normalizeStructuredPayload } from '@/lib/agent-response';
 interface ChatMessage {
   role: 'user' | 'assistant';
   content: AgentMessageContent;
+}
+
+interface PromptInputComponentProps {
+  layout?: 'page' | 'embedded';
+  prefillText?: string;
 }
 
 const models = [
@@ -49,18 +54,26 @@ const models = [
   { id: 'mistral-7b', name: 'Mistral 7B' },
 ];
 
-const PromptInputComponent = () => {
+const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputComponentProps) => {
   const [text, setText] = useState<string>('');
   const [model, setModel] = useState<string>(models[0].id);
-  const [status, setStatus] = useState<
-    'submitted' | 'streaming' | 'ready' | 'error'
-  >('ready');
+  const [status, setStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready');
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const lastPrefillRef = useRef<string | undefined>(undefined);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
 
+  useEffect(() => {
+    if (prefillText !== undefined && prefillText !== lastPrefillRef.current) {
+      setText(prefillText);
+      lastPrefillRef.current = prefillText;
+      if (textareaRef.current) {
+        textareaRef.current.focus({ preventScroll: true });
+      }
+    }
+  }, [prefillText]);
+
   const stop = () => {
-    console.log('Stopping request...');
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
       timeoutRef.current = null;
@@ -68,8 +81,6 @@ const PromptInputComponent = () => {
     setStatus('ready');
   };
 
-  // Use the entire handleSubmit from the "newly produced code"
-  // as it contains the advanced parsing logic for CombinedMessageContent
   const handleSubmit = async (message: PromptInputMessage) => {
     setText('');
     if (status === 'streaming' || status === 'submitted') {
@@ -123,10 +134,9 @@ const PromptInputComponent = () => {
       setStatus('streaming');
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
-      let responseText = ''; // Accumulates the full raw response
-  let structuredFromStream: AgentMessageContent | null = null;
+      let responseText = '';
+      let structuredFromStream: AgentMessageContent | null = null;
 
-      // Add a placeholder for the assistant's message
       setMessages((prev) => [
         ...prev,
         {
@@ -140,14 +150,12 @@ const PromptInputComponent = () => {
         if (done) break;
 
         const chunk = decoder.decode(value);
-        console.debug('[AIChat] Received chunk', chunk);
         const lines = chunk.split('\n\n');
 
         for (const line of lines) {
           if (line.startsWith('data:')) {
             try {
               const data = JSON.parse(line.substring(5));
-              console.debug('[AIChat] Parsed SSE line', data);
               if (typeof data === 'string') {
                 responseText += data;
               } else if (data && typeof data === 'object') {
@@ -174,14 +182,13 @@ const PromptInputComponent = () => {
                   break;
                 }
               }
-            } catch (e) {
-              console.error('Error parsing JSON chunk:', e);
+            } catch (error) {
+              console.error('Error parsing JSON chunk:', error);
             }
           }
         }
       }
 
-      // --- FIX: Clean and Parse the final text (from new code) ---
       let cleanedText = responseText;
       const jsonRegex = /```json\s*([\s\S]*?)\s*```/;
       const match = jsonRegex.exec(responseText);
@@ -190,10 +197,6 @@ const PromptInputComponent = () => {
         cleanedText = match[1];
       }
 
-      console.debug('[AIChat] Raw responseText', responseText);
-      console.debug('[AIChat] Cleaned text candidate', cleanedText);
-
-      // Now, try to parse the cleanedText as the CombinedMessageContent
       const messageContent: AgentMessageContent = {
         raw: responseText,
       };
@@ -215,16 +218,13 @@ const PromptInputComponent = () => {
       } catch (parseError) {
         console.debug('Failed to parse assistant payload as JSON.', parseError);
       }
+
       if (!messageContent.text) {
         messageContent.text = cleanedText.trim() ? cleanedText : responseText;
       }
-      console.debug('[AIChat] Final message content constructed', messageContent);
-      // --- End of Fix ---
 
-      // Update state ONCE with the final, parsed content
       setMessages((prev) => {
         const newMessages = [...prev];
-        // Store the parsed content directly in the text field
         const lastIndex = newMessages.length - 1;
         if (lastIndex >= 0) {
           const lastMessage = newMessages[lastIndex];
@@ -233,7 +233,6 @@ const PromptInputComponent = () => {
             content: messageContent,
           };
         }
-        console.log('Final content being set:', messageContent);
         return newMessages;
       });
     } catch (error) {
@@ -259,31 +258,24 @@ const PromptInputComponent = () => {
     }
   };
 
-  return (
-    // Use layout from new code
-    <div className="flex flex-col  w-full h-[80vh] rounded-lg bg-white">
-      {/* Use message rendering from new code */}
-      <div className="flex-1 p-4 space-y-4 overflow-y-auto w-full flex flex-col-reverse">
-        {[...messages].reverse().map((msg, i) => (
+  const isEmbedded = layout === 'embedded';
+
+  const chatPanel = (
+    <div className={`flex flex-col w-full rounded-lg bg-white ${isEmbedded ? 'h-full' : 'h-[86vh]'}`}>
+      <div className="flex-1 w-full overflow-y-auto p-4 space-y-6 flex flex-col-reverse">
+        {[...messages].reverse().map((msg, index) => (
           <div
-            key={i}
-            className={`flex ${
-              msg.role === 'user' ? 'justify-end w-4/6 ml-auto' : 'justify-start'
-            }`}
+            key={index}
+            className={`flex mb-4 ${msg.role === 'user' ? 'ml-auto w-4/6 justify-end' : 'justify-start'}`}
           >
             <div
-              className={`p-2 rounded-lg ${
-                msg.role === 'user'
-                  ? 'bg-blue-500 text-white'
-                  : 'bg-gray-200 text-black'
+              className={`rounded-lg p-4 ${
+                msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'
               }`}
             >
               {(() => {
-                // This logic handles rendering for both user (string)
-                // and assistant (string | CombinedMessageContent)
                 const content = msg.content ?? {};
-                const textToRender =
-                  content.text ?? (typeof content.raw === 'string' ? content.raw : '');
+                const textToRender = content.text ?? (typeof content.raw === 'string' ? content.raw : '');
 
                 return (
                   <>
@@ -292,17 +284,16 @@ const PromptInputComponent = () => {
                         {textToRender}
                       </ReactMarkdown>
                     )}
-                    {Array.isArray(content.charts) &&
-                      content.charts.length > 0 && (
-                        <div className="mt-3 space-y-3">
-                          {content.charts.map((chart, chartIndex) => (
-                            <ChatChartRenderer
-                              key={chart.id ?? `${i}-chart-${chartIndex}`}
-                              chart={chart}
-                            />
-                          ))}
-                        </div>
-                      )}
+                    {Array.isArray(content.charts) && content.charts.length > 0 && (
+                      <div className="mt-3 space-y-3">
+                        {content.charts.map((chart, chartIndex) => (
+                          <ChatChartRenderer
+                            key={chart.id ?? `${index}-chart-${chartIndex}`}
+                            chart={chart}
+                          />
+                        ))}
+                      </div>
+                    )}
                   </>
                 );
               })()}
@@ -310,55 +301,48 @@ const PromptInputComponent = () => {
           </div>
         ))}
       </div>
-
-      {/* Use PromptInput structure from old code - Now at bottom */}
       <div className="border-t bg-white">
         <PromptInput globalDrop multiple onSubmit={handleSubmit}>
-        <PromptInputBody>
-          <PromptInputAttachments>
-            {(attachment) => <PromptInputAttachment data={attachment} />}
-          </PromptInputAttachments>
-          <PromptInputTextarea
-            onChange={(e) => setText(e.target.value)}
-            ref={textareaRef}
-            value={text}
-          />
-        </PromptInputBody>
-        <PromptInputFooter>
-          <PromptInputTools>
-            <PromptInputActionMenu>
-              <PromptInputActionMenuTrigger />
-              <PromptInputActionMenuContent>
-                <PromptInputActionAddAttachments />
-              </PromptInputActionMenuContent>
-            </PromptInputActionMenu>
-            <PromptInputSpeechButton
-              onTranscriptionChange={setText}
-              textareaRef={textareaRef}
-            />
-            <PromptInputButton>
-              <GlobeIcon size={16} />
-              <span>Search</span>
-            </PromptInputButton>
-            <PromptInputModelSelect onValueChange={setModel} value={model}>
-              <PromptInputModelSelectTrigger>
-                <PromptInputModelSelectValue />
-              </PromptInputModelSelectTrigger>
-              <PromptInputModelSelectContent>
-                {models.map((modelOption) => (
-                  <PromptInputModelSelectItem
-                    key={modelOption.id}
-                    value={modelOption.id}
-                  >
-                    {modelOption.name}
-                  </PromptInputModelSelectItem>
-                ))}
-              </PromptInputModelSelectContent>
-            </PromptInputModelSelect>
-          </PromptInputTools>
-          <PromptInputSubmit className="!h-8" status={status} />
-        </PromptInputFooter>
-      </PromptInput>
+          <PromptInputBody>
+            <PromptInputAttachments>
+              {(attachment) => <PromptInputAttachment data={attachment} />}
+            </PromptInputAttachments>
+            <PromptInputTextarea onChange={(event) => setText(event.target.value)} ref={textareaRef} value={text} />
+          </PromptInputBody>
+          <PromptInputFooter>
+            <PromptInputTools>
+              <PromptInputActionMenu>
+                <PromptInputActionMenuTrigger />
+                <PromptInputActionMenuContent>
+                  <PromptInputActionAddAttachments />
+                </PromptInputActionMenuContent>
+              </PromptInputActionMenu>
+          
+            </PromptInputTools>
+            <PromptInputSubmit className="!h-8" status={status} />
+          </PromptInputFooter>
+        </PromptInput>
+      </div>
+    </div>
+  );
+
+  if (isEmbedded) {
+    return <div className="flex h-full w-full flex-col">{chatPanel}</div>;
+  }
+
+  return (
+    <div className="flex min-h-screen w-full flex-col py-5">
+      <div className="mx-auto flex w-full max-w-[1200px] flex-1 flex-col gap-6 px-4 sm:px-6 lg:px-8">
+        <header className="text-center">
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">AI Assistant</h1>
+          <p className="mt-2 text-sm text-slate-600">
+            Ask questions, explore insights, and generate charts powered by your data.
+          </p>
+        </header>
+
+        <div className="flex-1 overflow-hidden rounded-2xl border shadow-xl shadow-slate-200/40">
+          {chatPanel}
+        </div>
       </div>
     </div>
   );

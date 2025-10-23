@@ -14,9 +14,23 @@ export type CacheEntry<T> = {
  * - Exposes isHydrated and isFresh (based on ttlMs)
  */
 export function useLocalStorageCache<T>(key: string, initialValue: T, ttlMs: number) {
-  const [entry, setEntry] = useState<CacheEntry<T> | null>(null)
-  const [isHydrated, setIsHydrated] = useState(false)
+  // Synchronously hydrate from localStorage on first render to avoid UI flicker
+  const [entry, setEntry] = useState<CacheEntry<T>>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const raw = window.localStorage.getItem(key)
+        if (raw) {
+          return JSON.parse(raw) as CacheEntry<T>
+        }
+      } catch (e) {
+        console.warn(`[useLocalStorageCache] initial read failed for ${key}`, e)
+      }
+    }
+    return { v: initialValue, t: 0 }
+  })
+  const [isHydrated, setIsHydrated] = useState<boolean>(() => typeof window !== 'undefined')
 
+  // Re-read when key changes (rare) to keep state aligned
   useEffect(() => {
     try {
       const raw = window.localStorage.getItem(key)
@@ -32,7 +46,7 @@ export function useLocalStorageCache<T>(key: string, initialValue: T, ttlMs: num
     } finally {
       setIsHydrated(true)
     }
-  }, [key]) // Removed initialValue from dependencies
+  }, [key]) // intentionally exclude initialValue to avoid unintended resets
 
   const isFresh = useMemo(() => {
     if (!entry) return false

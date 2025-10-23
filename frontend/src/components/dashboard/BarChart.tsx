@@ -7,6 +7,9 @@ import { ChartConfig, ChartContainer, ChartTooltip, ChartTooltipContent } from "
 import { Skeleton } from "@/components/ui/skeleton";
 import { analyticsApi } from "@/lib/analytics-api";
 import { useLocalStorageCache } from "@/hooks/use-local-storage-cache";
+import { cn } from "@/lib/utils";
+import { Star } from "lucide-react";
+import { DashboardInsightPayload } from "./insights";
 
 // Config for the vertical bar chart (avg cycle time)
 const envelopeTypeConfig = {
@@ -21,7 +24,13 @@ type CycleTimeItem = {
   avgHours: number;
 };
 
-export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
+export function EnvelopeTypeCycleChart({
+  className,
+  onOpenInsight,
+}: {
+  className?: string;
+  onOpenInsight?: (payload: DashboardInsightPayload) => void;
+}) {
   const TEN_MIN = 10 * 60 * 1000;
   const [items, setItems, isHydrated, isFresh] = useLocalStorageCache<CycleTimeItem[]>(
     "analytics:cycle-time-by-document:v1",
@@ -64,9 +73,49 @@ export function EnvelopeTypeCycleChart({ className }: { className?: string }) {
   );
 
   const showEmpty = !isLoading && !error && chartData.length === 0;
+  const topPerformer = useMemo(() => {
+    if (chartData.length === 0) return null;
+    return chartData.reduce((best, current) =>
+      current.avgHours < best.avgHours ? current : best
+    );
+  }, [chartData]);
+
+  const handleInsightClick = () => {
+    if (!onOpenInsight) return;
+
+    const summary = error
+      ? `Unable to load cycle time data: ${error}`
+      : showEmpty
+        ? "No document types were returned for the current filters."
+        : `Displaying average completion hours for ${chartData.length} envelope types.${
+            topPerformer ? ` Fastest completion: ${topPerformer.type} at ${topPerformer.avgHours.toFixed(2)} hours.` : ""
+          }`;
+
+    onOpenInsight({
+      title: "Average Contract Cycle Time by Envelope Type",
+      summary,
+      data: chartData,
+      metadata: {
+        component: "envelope-type-cycle-chart",
+        lastUpdated: new Date().toISOString(),
+        isLoading,
+        dataPoints: chartData.length,
+      },
+    });
+  };
 
   return (
-    <Card className={className}>
+    <Card className={cn("relative group", className)}>
+      {onOpenInsight && (
+        <button
+          type="button"
+          onClick={handleInsightClick}
+          className="absolute top-3 right-3 flex items-center justify-center rounded-full bg-white/95 p-2 text-amber-500 shadow-lg transition-all duration-200 hover:scale-105 hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          aria-label="Ask AI about envelope cycle time"
+        >
+          <Star className="h-4 w-4" />
+        </button>
+      )}
       <CardHeader>
         <CardTitle>Average Contract Cycle Time by Envelope Type</CardTitle>
         <CardDescription>Average time to completion by envelope type (in hours)</CardDescription>
@@ -128,7 +177,13 @@ const dailyConfig = {
 
 type DailyItem = { date: string; sent: number; completed: number };
 
-export function ContractSigningsChart({ className }: { className?: string }) {
+export function ContractSigningsChart({
+  className,
+  onOpenInsight,
+}: {
+  className?: string;
+  onOpenInsight?: (payload: DashboardInsightPayload) => void;
+}) {
   const DAYS = 10;
   const TEN_MIN = 10 * 60 * 1000;
   const [items, setItems, isHydrated, isFresh] = useLocalStorageCache<DailyItem[]>(
@@ -171,8 +226,44 @@ export function ContractSigningsChart({ className }: { className?: string }) {
     }));
   }, [items]);
 
+  const totalSent = useMemo(() => chartData.reduce((sum, item) => sum + item.sent, 0), [chartData]);
+  const totalCompleted = useMemo(() => chartData.reduce((sum, item) => sum + item.completed, 0), [chartData]);
+
+  const handleInsightClick = () => {
+    if (!onOpenInsight) return;
+
+    const summary = error
+      ? error
+      : chartData.length === 0
+        ? "No recent envelope activity is available for analysis."
+        : `Tracking daily sent vs completed envelopes for the last ${chartData.length} days. Total sent: ${totalSent}. Total completed: ${totalCompleted}.`;
+
+    onOpenInsight({
+      title: "Contract Signings",
+      summary,
+      data: chartData,
+      metadata: {
+        component: "contract-signings-chart",
+        windowDays: DAYS,
+        isLoading,
+        totalSent,
+        totalCompleted,
+      },
+    });
+  };
+
   return (
-    <Card className={className}>
+    <Card className={cn("relative group", className)}>
+      {onOpenInsight && (
+        <button
+          type="button"
+          onClick={handleInsightClick}
+          className="absolute top-3 right-3 flex items-center justify-center rounded-full bg-white/95 p-2 text-amber-500 shadow-lg transition-all duration-200 hover:scale-105 hover:text-amber-600 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-500 focus-visible:ring-offset-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          aria-label="Ask AI about contract signings"
+        >
+          <Star className="h-4 w-4" />
+        </button>
+      )}
       <CardHeader>
         <CardTitle>Contract Signings</CardTitle>
         <CardDescription>Daily sent vs completed envelopes</CardDescription>
