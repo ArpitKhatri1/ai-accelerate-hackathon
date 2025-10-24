@@ -20,6 +20,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source code
 COPY . /app/backend
+
 # Start the production server (Gunicorn + Uvicorn workers)
-CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--pythonpath", "/app", "-b", "0.0.0.0:$PORT", "backend.main:app"]
+# Use shell form so $PORT is expanded by the shell in Cloud Run.
+# Keep parent /app on PYTHONPATH so 'backend.main:app' imports correctly.
+CMD ["sh", "-c", "exec gunicorn -w ${WORKERS:-2} -k uvicorn.workers.UvicornWorker --pythonpath /app -b 0.0.0.0:${PORT:-8080} backend.main:app"]
 
