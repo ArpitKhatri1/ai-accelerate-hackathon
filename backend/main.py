@@ -152,6 +152,11 @@ async def get_cycle_time_by_document(limit: int = 6):
         WHERE envelope.contract_cycle_time_hours IS NOT NULL
           AND cf.value IS NOT NULL
           AND TRIM(cf.value) != ''
+          AND LOWER(TRIM(cf.value)) NOT IN ('docusignit', 'docusignweb')
+          AND (
+              envelope.sent_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+              OR envelope.completed_timestamp >= TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL 60 DAY)
+          )
         GROUP BY cf.value
         HAVING avg_cycle_hours IS NOT NULL
         ORDER BY avg_cycle_hours DESC
@@ -183,8 +188,8 @@ async def get_cycle_time_by_document(limit: int = 6):
 
 
 @app.get("/analytics/envelopes/daily-sent-vs-completed")
-async def get_daily_sent_vs_completed(days: int = 10):
-    window_days = max(1, min(days, 30))
+async def get_daily_sent_vs_completed(days: int = 60):
+    window_days = max(1, 60)
     query = f"""
     WITH offsets AS (
       SELECT value AS offset
@@ -213,6 +218,7 @@ async def get_daily_sent_vs_completed(days: int = 10):
     FROM calendar
     LEFT JOIN sent USING (event_date)
     LEFT JOIN completed USING (event_date)
+    WHERE COALESCE(sent.sent_count, 0) > 0 OR COALESCE(completed.completed_count, 0) > 0
     ORDER BY event_date
     """
 

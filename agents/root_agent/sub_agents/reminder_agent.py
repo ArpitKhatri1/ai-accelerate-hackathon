@@ -83,7 +83,7 @@ send_reminders_tool = FunctionTool(
 
 rem_agent = Agent(
     name="reminder_agent",
-    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-1.5-flash"),
+    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
     description="An agent that sends reminders for expiring DocuSign contracts by running an automated workflow.",
     instruction=(
         """You are a helpful assistant that automates sending DocuSign reminders.

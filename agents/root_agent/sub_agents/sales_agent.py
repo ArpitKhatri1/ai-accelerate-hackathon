@@ -100,7 +100,7 @@ document_retrieval_tool = FunctionTool(
 
 sales_agent = Agent(
     name="sales_agent",
-    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-1.5-flash"),
+    model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
     description="An agent that analyzes sales data, contract information, and provides insights using document retrieval capabilities.",
     instruction=(
         """You are a helpful sales operations analyst that can analyze contract data and retrieve relevant document information.
