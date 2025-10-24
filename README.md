@@ -1,11 +1,11 @@
 ## INSPIRATION
 
-**DocuLytics** was born from the need to transform raw DocuSign envelope data into actionable insights. In a world where document workflows are critical for business operations, we envisioned an AI-powered platform that not only analyzes envelope metrics but also provides intelligent chat interactions to answer complex queries about document processes.
+**DocuLytics** was born from the need to transform raw DocuSign envelope data into actionable insights.<br> In a world where **document workflows** are **critical** for business operations, we envisioned an AI-powered platform that not only analyzes envelope metrics but also provides **intelligent chat interactions** to answer complex queries about document processes.<br>
 The inspiration came from the challenges of manual data analysis in legal and sales environments, where understanding cycle times, status distributions, and user behaviors can drive significant efficiency gains.
 
 ## What It Does
 
-DocuLytics is a comprehensive analytics and AI chat platform for DocuSign data. It provides:
+**DocuLytics** is a comprehensive analytics and AI chat platform for DocuSign data. It provides:
 
 - **Real-time Analytics Dashboard**: Visualizes key performance indicators (KPIs) such as envelope cycle times, daily sent vs. completed metrics, status distributions, and detailed envelope tables with filtering and pagination.
 - **Custom Dashboard Builder**: Enables users to create personalized dashboards by dragging and dropping widgets, configuring data sources, and customizing layouts for tailored analytics views and insights.
@@ -18,26 +18,55 @@ The platform enables users to explore DocuSign envelope data through natural lan
 
 ## How We Built It
 
-#### Data Flow from DocuSign to BigQuery
-When a user sends a DocuSign envelope, it triggers updates to DocuSign's API endpoints. The envelope creation and status changes (e.g., sent, viewed, signed, completed) modify the envelope data in DocuSign's system. Our custom Fivetran connector continuously monitors these API changes through DocuSign's REST API (every 6 hours for now), detecting new or updated envelopes, documents, custom fields, and recipients. The connector then extracts this data and loads it into Google BigQuery tables (envelopes, documents, custom_fields, recipients), From the document data stored in BigQuery, we run custom queries every X hours to retrieve relevant documents. These documents are then split into chunks for efficient Retrieval-Augmented Generation (RAG). This process involves preprocessing the text content, dividing it into manageable segments, and indexing them for fast retrieval during AI chat interactions, enabling context-aware responses based on actual document content.
+#### **Data Flow from DocuSign to BigQuery**
+Our architecture is built on an automated pipeline that syncs DocuSign data into a queryable format and prepares it for our AI. The flow is visualized below.
+<p align="center">
+  <img src="./assets/data_pipeline.png" alt="Data Pipeline" width="300"/>
+</p>
+<table>
+  <tr>
+    <td valign="top" width="200"><strong>1. DocuSign Event Trigger</strong></td>
+    <td>Actions on a DocuSign envelope update data in the DocuSign API.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>2. Data Extraction</strong></td>
+    <td>A custom Fivetran connector monitors the API, extracting new and updated data every 6 hours.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>3. Load into BigQuery</strong></td>
+    <td>The connector loads this raw data into structured tables in Google BigQuery.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>4. RAG Pipeline</strong></td>
+    <td>We run scheduled queries to pull document text from BigQuery, which is then chunked and indexed for efficient retrieval.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>5. AI Interaction</strong></td>
+    <td>When a user chats with the AI, the indexed content provides the necessary context, enabling accurate, <strong>document-aware responses</strong>.</td>
+  </tr>
+</table>
+
+
 
 ## AI Agents 
-
+<p align="center">
+  <img src="./assets/agent_architecture.png" alt="Agent Architecture" width="700"/>
+</p>
 #### Components
 - Root Orchestrator: `root_agent` that receives the user prompt and decides which specialist agent should handle it.
 - Specialist Agents:
-	- `chart_agent`: Creates data-driven visualizations from BigQuery results (e.g., bar/line charts for KPIs).
-	- `sales_agent`: Handles sales/customer operations and lookups; may enrich answers via BigQuery or external sources.
-	- `reminder_agent`: Manages reminder or follow-up tasks (e.g., set a reminder to check an envelope’s status).
-	- `legal_agent`: Focuses on legal/document questions, often using RAG over document text.
+    - `chart_agent`: Creates data-driven visualizations from BigQuery results (e.g., bar/line charts for KPIs).
+    - `sales_agent`: Handles sales/customer operations and lookups; may enrich answers via BigQuery or external sources.
+    - `reminder_agent`: Manages reminder or follow-up tasks (e.g., set a reminder to check an envelope’s status).
+    - `legal_agent`: Focuses on legal/document questions, often using RAG over document text.
 - Utility Agent:
-	- `bigquery_agent`: Shared, low-level data access layer used by other agents for SQL queries and vector search.
+    - `bigquery_agent`: Shared, low-level data access layer used by other agents for SQL queries and vector search.
 - External Tools, Data & APIs:
-	- BigQuery Dataset (structured data): Envelope, document, custom_fields, and recipients tables.
-	- BigQuery Table (vector embeddings): Stores text chunk embeddings for Retrieval-Augmented Generation (RAG).
-	- Vertex AI Embedding model: Generates vector embeddings for queries and document chunks.
-	- DocuSign API: Optional direct lookups or actions when needed beyond the analytics warehouse.
-	- Google Search: Fallback for external/public knowledge when appropriate.
+    - BigQuery Dataset (structured data): Envelope, document, custom_fields, and recipients tables.
+    - BigQuery Table (vector embeddings): Stores text chunk embeddings for Retrieval-Augmented Generation (RAG).
+    - Vertex AI Embedding model: Generates vector embeddings for queries and document chunks.
+    - DocuSign API: Optional direct lookups or actions when needed beyond the analytics warehouse.
+    - Google Search: Fallback for external/public knowledge when appropriate.
 
 #### Decision Flow
 1. A user submits a prompt to the backend chat endpoint. The backend initializes a session (via the runner) and forwards the prompt to the `root_agent`.
@@ -90,6 +119,9 @@ When a user sends a DocuSign envelope, it triggers updates to DocuSign's API end
 ## Frontend and Backend Design
 
 **Backend** (FastAPI) — main routes :-
+<p align="center">
+  <img src="./assets/backend.png" alt="Backend Visual" width="600"/>
+</p>
 - GET /analytics/kpis — returns high-level dashboard KPIs aggregated from BigQuery via the `analytics` module.
 - GET /analytics/envelopes/cycle-time-by-document — returns cycle time series grouped by document type (accepts `limit` query param).
 - GET /analytics/envelopes/daily-sent-vs-completed — returns time series of envelopes sent vs completed (accepts `days` param).
@@ -112,7 +144,7 @@ Notes on Backend modules
 
 ## Open Source Engagement 
 
-- Since this connector has an actual industry use case, we plan to open a PR to the Fivetran-connector-sdk GitHub repository, adding our connector so that people working on the same thing can benefit from it.
+- Since this connector has an actual industry use case, we plan to open a PR to the Fivetran-connector-sdk GitHub repository, adding our connector, so that people working on the same thing can benefit from it.
 
 ## Challenges we ran into
 
@@ -132,7 +164,7 @@ Notes on Backend modules
 
 - **Creating AI agents**: Learned how to effectively integrate Google Generative AI and ADK into a FastAPI application, including session management and agent coordination.
 
-- **Data Pipeline Design**: Understood the importance of reliable data ingestion and the challenges of syncing external APIs like DocuSign into analytics platforms using fivetran as a connector and BigQuery as a Data lake.
+- **Data Pipeline Design**: Understood the importance of reliable data ingestion and the challenges of syncing external APIs like DocuSign into analytics platforms using fivetran as a connector and BigQuery as a Data Lake.
 
 ## What's next for DocuLytics
 
