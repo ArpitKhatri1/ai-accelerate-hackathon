@@ -109,6 +109,10 @@ Frontend features and how they communicate
 	- The Dashboard Builder allows users to configure widgets and request on-demand charts Based on drag and drop components. The AI Chart feature can also be invoked from chat (or from a dashboard) to auto-generate chart specs from natural language prompts.
 	- The frontend calls POST `/analytics/resolve-widget` with a `prompt`, `kind` (e.g., `chart` or `text-insight`), and optional `chartType`. The backend runs the agent to translate the prompt into a structured chart spec (series, labels, and chart type) and/or a text insight.
 
+## Open Source Engagement 
+
+- Since this connector has an actual industry use case, we plan to open a PR to the Fivetran-connector-sdk GitHub repository, adding our connector so that people working on the same thing can benefit from it.
+
 ## Challenges we ran into
 
 - **AI Agent Coordination**: Integrating multiple specialized agents (BigQuery, chart, legal, reminder, sales) while maintaining coherent responses and avoiding conflicts in the chat system.
