@@ -57,8 +57,6 @@ interface PromptInputComponentProps {
   prefillText?: string;
 }
 
-
-
 const promptSuggestions = {
   sales: [
     "Show me the top performing sales contracts this quarter",
@@ -168,8 +166,10 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
       text: m.content?.text ?? '',
     }));
 
+    const AGENT_BASE_URL = process.env.NEXT_PUBLIC_AGENT_BASE_URL ?? 'http://localhost:8001';
+
     try {
-      const response = await fetch('http://localhost:8001/chat', {
+      const response = await fetch(`${AGENT_BASE_URL}/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -320,61 +320,63 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
           <h2 className="text-2xl font-semibold text-gray-900 mb-2">How can I help you today?</h2>
           <p className="text-gray-600">Choose a prompt below or ask your own question</p>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          {/* Sales Column */}
-          <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
-            <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
-              <span className="mr-2">📈</span> Sales
-            </h3>
-            <div className="space-y-3">
-              {promptSuggestions.sales.map((prompt, index) => (
-                <button
-                  key={index}
-                  onClick={() => setText(prompt)}
-                  className="w-full text-left p-3 bg-white rounded-md border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-blue-900"
-                >
-                  {prompt}
-                </button>
-              ))}
+        {
+          isEmbedded ? null : (<div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+            {/* Sales Column */}
+            <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+              <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+                <span className="mr-2">📈</span> Sales
+              </h3>
+              <div className="space-y-3">
+                {promptSuggestions.sales.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setText(prompt)}
+                    className="w-full text-left p-3 bg-white rounded-md border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-blue-900"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Legal Column */}
-          <div className="bg-linear-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
-            <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
-              <span className="mr-2">⚖️</span> Legal
-            </h3>
-            <div className="space-y-3">
-              {promptSuggestions.legal.map((prompt, index) => (
-                <button
-                  key={index}
-                  onClick={() => setText(prompt)}
-                  className="w-full text-left p-3 bg-white rounded-md border border-green-200 hover:border-green-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-green-900"
-                >
-                  {prompt}
-                </button>
-              ))}
+            {/* Legal Column */}
+            <div className="bg-linear-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+              <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
+                <span className="mr-2">⚖️</span> Legal
+              </h3>
+              <div className="space-y-3">
+                {promptSuggestions.legal.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setText(prompt)}
+                    className="w-full text-left p-3 bg-white rounded-md border border-green-200 hover:border-green-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-green-900"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
 
-          {/* Analytics Column */}
-          <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
-            <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
-              <span className="mr-2">📊</span> Analytics
-            </h3>
-            <div className="space-y-3">
-              {promptSuggestions.analytics.map((prompt, index) => (
-                <button
-                  key={index}
-                  onClick={() => setText(prompt)}
-                  className="w-full text-left p-3 bg-white rounded-md border border-purple-200 hover:border-purple-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-purple-900"
-                >
-                  {prompt}
-                </button>
-              ))}
+            {/* Analytics Column */}
+            <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+              <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+                <span className="mr-2">📊</span> Analytics
+              </h3>
+              <div className="space-y-3">
+                {promptSuggestions.analytics.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => setText(prompt)}
+                    className="w-full text-left p-3 bg-white rounded-md border border-purple-200 hover:border-purple-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-purple-900"
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
             </div>
-          </div>
-        </div>
+          </div>)
+        }
       </div>
     </div>
   );
@@ -386,42 +388,41 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
           <PromptSuggestions />
         ) : (
           [...messages].reverse().map((msg, index) => (
-          <div
-            key={index}
-            className={`flex mb-4 ${msg.role === 'user' ? 'ml-auto w-4/6 justify-end' : 'justify-start'}`}
-          >
             <div
-              className={`rounded-lg p-4 ${
-                msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black w-full'
-              }`}
+              key={index}
+              className={`flex mb-4 ${msg.role === 'user' ? 'ml-auto w-4/6 justify-end' : 'justify-start'}`}
             >
-              {(() => {
-                const content = msg.content ?? {};
-                const textToRender = content.text ?? (typeof content.raw === 'string' ? content.raw : '');
+              <div
+                className={`rounded-lg p-4 ${msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black w-full'
+                  }`}
+              >
+                {(() => {
+                  const content = msg.content ?? {};
+                  const textToRender = content.text ?? (typeof content.raw === 'string' ? content.raw : '');
 
-                return (
-                  <>
-                    {textToRender && (
-                      <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                        {textToRender}
-                      </ReactMarkdown>
-                    )}
-                    {Array.isArray(content.charts) && content.charts.length > 0 && (
-                      <div className="mt-3 space-y-3">
-                        {content.charts.map((chart, chartIndex) => (
-                          <ChatChartRenderer
-                            key={chart.id ?? `${index}-chart-${chartIndex}`}
-                            chart={chart}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </>
-                );
-              })()}
+                  return (
+                    <>
+                      {textToRender && (
+                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                          {textToRender}
+                        </ReactMarkdown>
+                      )}
+                      {Array.isArray(content.charts) && content.charts.length > 0 && (
+                        <div className="mt-3 space-y-3">
+                          {content.charts.map((chart, chartIndex) => (
+                            <ChatChartRenderer
+                              key={chart.id ?? `${index}-chart-${chartIndex}`}
+                              chart={chart}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
+              </div>
             </div>
-          </div>
-        ))
+          ))
         )}
       </div>
       <div className="border-t bg-white">
@@ -440,7 +441,7 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
                   <PromptInputActionAddAttachments />
                 </PromptInputActionMenuContent>
               </PromptInputActionMenu>
-          
+
             </PromptInputTools>
             <PromptInputSubmit className="h-8!" status={status} />
           </PromptInputFooter>
@@ -472,3 +473,4 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
 };
 
 export default PromptInputComponent;
+
