@@ -18,7 +18,7 @@ The platform enables users to explore DocuSign envelope data through natural lan
 ## How we built it
 
 #### Data Flow from DocuSign to BigQuery
-When a user sends a DocuSign envelope, it triggers updates to DocuSign's API endpoints. The envelope creation and status changes (e.g., sent, viewed, signed, completed) modify the envelope data in DocuSign's system. Our custom Fivetran connector continuously monitors these API changes through DocuSign's REST API (every 6 hours for now), detecting new or updated envelopes, documents, custom fields, and recipients. The connector then extracts this data and loads it into Google BigQuery tables (envelopes, documents, custom_fields, recipients), ### Step 3: RAG Document Processing Setup.From the document data stored in BigQuery, we run custom queries every X hours to retrieve relevant documents. These documents are then split into chunks for efficient Retrieval-Augmented Generation (RAG). This process involves preprocessing the text content, dividing it into manageable segments, and indexing them for fast retrieval during AI chat interactions, enabling context-aware responses based on actual document content.
+When a user sends a DocuSign envelope, it triggers updates to DocuSign's API endpoints. The envelope creation and status changes (e.g., sent, viewed, signed, completed) modify the envelope data in DocuSign's system. Our custom Fivetran connector continuously monitors these API changes through DocuSign's REST API (every 6 hours for now), detecting new or updated envelopes, documents, custom fields, and recipients. The connector then extracts this data and loads it into Google BigQuery tables (envelopes, documents, custom_fields, recipients), From the document data stored in BigQuery, we run custom queries every X hours to retrieve relevant documents. These documents are then split into chunks for efficient Retrieval-Augmented Generation (RAG). This process involves preprocessing the text content, dividing it into manageable segments, and indexing them for fast retrieval during AI chat interactions, enabling context-aware responses based on actual document content.
 
 ## AI Agents 
 
@@ -108,7 +108,6 @@ Frontend features and how they communicate
 - AI Chart / Dashboard Builder
 	- The Dashboard Builder allows users to configure widgets and request on-demand charts Based on drag and drop components. The AI Chart feature can also be invoked from chat (or from a dashboard) to auto-generate chart specs from natural language prompts.
 	- The frontend calls POST `/analytics/resolve-widget` with a `prompt`, `kind` (e.g., `chart` or `text-insight`), and optional `chartType`. The backend runs the agent to translate the prompt into a structured chart spec (series, labels, and chart type) and/or a text insight.
-
 
 ## Challenges we ran into
 
