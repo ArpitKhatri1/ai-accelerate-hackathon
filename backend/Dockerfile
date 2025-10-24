@@ -20,10 +20,6 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy backend source code
 COPY . /app/backend
-
-# Cloud Run provides PORT env; run.py reads it with default 8000
-EXPOSE 8000
-
-# Start the app via the dev runner which launches uvicorn
-CMD ["python", "run.py"]
+# Start the production server (Gunicorn + Uvicorn workers)
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "--pythonpath", "/app", "-b", "0.0.0.0:$PORT", "backend.main:app"]
 
