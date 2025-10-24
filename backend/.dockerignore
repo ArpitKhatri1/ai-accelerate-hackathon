@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.sqlite3
+*.db
+
+# Env and secrets
+.env
+agents/.env
+agents/docusign-arpit.json
+
+# VCS
+.git
+.gitignore
+
+# Node (if any)
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode
+.idea
+
