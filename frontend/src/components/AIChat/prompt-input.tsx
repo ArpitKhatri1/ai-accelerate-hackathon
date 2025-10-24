@@ -59,19 +59,13 @@ interface PromptInputComponentProps {
 
 const promptSuggestions = {
   sales: [
-    "Show me the top performing sales contracts this quarter",
-    "Analyze customer churn patterns and provide retention strategies",
-    "Generate a sales forecast for the next 6 months based on current trends"
+    "Plot the customers by name who have signed the most contracts in the last 60 days in a bar graph , and provide a analysis which user will be best to upsell",
   ],
   legal: [
-    "Review the latest contract amendments and flag any compliance issues",
-    "Summarize pending legal documents requiring attention",
-    "Analyze contract cycle times and identify bottlenecks in the approval process"
+    "Show me the lastest government regulations on data privacy compliance and summarize the key points in bullet form",
   ],
   analytics: [
-    "Create a dashboard showing key performance metrics for the last 30 days",
-    "Compare envelope completion rates across different document types",
-    "Generate insights on user engagement patterns with our platform"
+   "Analyze contract cycle times and identify bottlenecks in the approval process using bar graph"
   ]
 };
 
