@@ -52,21 +52,47 @@ Our architecture is built on an automated pipeline that syncs DocuSign data into
 <p align="center">
   <img src="./assets/agent_architecture.png" alt="Agent Architecture" width="700"/>
 </p>
-#### Components
-- Root Orchestrator: `root_agent` that receives the user prompt and decides which specialist agent should handle it.
-- Specialist Agents:
-    - `chart_agent`: Creates data-driven visualizations from BigQuery results (e.g., bar/line charts for KPIs).
-    - `sales_agent`: Handles sales/customer operations and lookups; may enrich answers via BigQuery or external sources.
-    - `reminder_agent`: Manages reminder or follow-up tasks (e.g., set a reminder to check an envelope’s status).
-    - `legal_agent`: Focuses on legal/document questions, often using RAG over document text.
-- Utility Agent:
-    - `bigquery_agent`: Shared, low-level data access layer used by other agents for SQL queries and vector search.
-- External Tools, Data & APIs:
-    - BigQuery Dataset (structured data): Envelope, document, custom_fields, and recipients tables.
-    - BigQuery Table (vector embeddings): Stores text chunk embeddings for Retrieval-Augmented Generation (RAG).
-    - Vertex AI Embedding model: Generates vector embeddings for queries and document chunks.
-    - DocuSign API: Optional direct lookups or actions when needed beyond the analytics warehouse.
-    - Google Search: Fallback for external/public knowledge when appropriate.
+
+**COMPONENTS**
+<table>
+  <tr>
+    <td valign="top" width="220"><strong>Root Orchestrator</strong></td>
+    <td><code>root_agent</code> that receives the user prompt and decides which specialist agent should handle it.</td>
+  </tr>
+  <tr>
+    <td valign="middle" rowspan="4"><strong>Specialist Agents</strong></td>
+    <td><code>chart_agent</code>: Creates data-driven visualizations from BigQuery results (e.g., bar/line charts for KPIs).</td>
+  </tr>
+  <tr>
+    <td><code>sales_agent</code>: Handles sales/customer operations and lookups; may enrich answers via BigQuery or external sources.</td>
+  </tr>
+  <tr>
+    <td><code>reminder_agent</code>: Manages reminder or follow-up tasks (e.g., set a reminder to check an envelope’s status).</td>
+  </tr>
+  <tr>
+    <td><code>legal_agent</code>: Focuses on legal/document questions, often using RAG over document text.</td>
+  </tr>
+  <tr>
+    <td valign="top"><strong>Utility Agent</strong></td>
+    <td><code>bigquery_agent</code>: Shared, low-level data access layer used by other agents for SQL queries and vector search.</td>
+  </tr>
+  <tr>
+    <td valign="middle" rowspan="5"><strong>External Tools, Data & APIs</strong></td>
+    <td>BigQuery Dataset (structured data): Envelope, document, custom_fields, and recipients tables.</td>
+  </tr>
+  <tr>
+    <td>BigQuery Table (vector embeddings): Stores text chunk embeddings for Retrieval-Augmented Generation (RAG).</td>
+  </tr>
+  <tr>
+    <td>Vertex AI Embedding model: Generates vector embeddings for queries and document chunks.</td>
+  </tr>
+  <tr>
+    <td>DocuSign API: Optional direct lookups or actions when needed beyond the analytics warehouse.</td>
+  </tr>
+  <tr>
+    <td>Google Search: Fallback for external/public knowledge when appropriate.</td>
+  </tr>
+</table>
 
 #### Decision Flow
 1. A user submits a prompt to the backend chat endpoint. The backend initializes a session (via the runner) and forwards the prompt to the `root_agent`.
@@ -122,13 +148,36 @@ Our architecture is built on an automated pipeline that syncs DocuSign data into
 <p align="center">
   <img src="./assets/backend.png" alt="Backend Visual" width="600"/>
 </p>
-- GET /analytics/kpis — returns high-level dashboard KPIs aggregated from BigQuery via the `analytics` module.
-- GET /analytics/envelopes/cycle-time-by-document — returns cycle time series grouped by document type (accepts `limit` query param).
-- GET /analytics/envelopes/daily-sent-vs-completed — returns time series of envelopes sent vs completed (accepts `days` param).
-- GET /analytics/envelopes/status-distribution — returns recent status distribution counts (accepts `limit` param).
-- GET /analytics/envelopes/table — returns paginated envelopes table with optional search and status filters (`limit`, `page`, `q`, `status`).
-- POST /chat — main chat endpoint used by the AI chat UI. Accepts a JSON body with `message` and optional `history`. The backend streams events from the agent runner back to the frontend as Server-Sent Events (SSE).
-- POST /analytics/resolve-widget — used by the frontend when the user asks for a chart or text-insight. The backend runs the widget/agent flow and returns a structured payload containing `text` and `charts` (chart specs and data).
+<table>
+  <tr>
+    <td valign="top" width="400"><code><strong>GET</strong> /analytics/kpis</code></td>
+    <td>Returns high-level dashboard KPIs aggregated from BigQuery via the <code>analytics</code> module.</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>GET</strong> /analytics/envelopes/cycle-time-by-document</code></td>
+    <td>Returns cycle time series grouped by document type (accepts <code>limit</code> query param).</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>GET</strong> /analytics/envelopes/daily-sent-vs-completed</code></td>
+    <td>Returns time series of envelopes sent vs completed (accepts <code>days</code> param).</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>GET</strong> /analytics/envelopes/status-distribution</code></td>
+    <td>Returns recent status distribution counts (accepts <code>limit</code> param).</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>GET</strong> /analytics/envelopes/table</code></td>
+    <td>Returns paginated envelopes table with optional search and status filters (<code>limit</code>, <code>page</code>, <code>q</code>, <code>status</code>).</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>POST</strong> /chat</code></td>
+    <td>Main chat endpoint used by the AI chat UI. Accepts a JSON body with <code>message</code> and optional <code>history</code>. The backend streams events from the agent runner back to the frontend as Server-Sent Events (SSE).</td>
+  </tr>
+  <tr>
+    <td valign="top"><code><strong>POST</strong> /analytics/resolve-widget</code></td>
+    <td>Used by the frontend when the user asks for a chart or text-insight. The backend runs the widget/agent flow and returns a structured payload containing <code>text</code> and <code>charts</code> (chart specs and data).</td>
+  </tr>
+</table>
 
 Notes on Backend modules
 - `backend/analytics.py` — wraps BigQuery queries and transformations; all analytics GET routes delegate to functions in this module.
