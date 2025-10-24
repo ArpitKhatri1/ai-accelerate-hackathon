@@ -1,3 +1,4 @@
+from dotenv import load_dotenv
 from google.adk.agents.llm_agent import Agent
 from google.adk.tools.agent_tool import AgentTool
 from .sub_agents.bigquery_agent import bigquery_agent
@@ -6,6 +7,9 @@ from .sub_agents.legal_agent import contract_risk_agent
 from .sub_agents.reminder_agent import rem_agent
 from .sub_agents.sales_agent import sales_agent, document_retrieval_tool
 import os
+
+
+load_dotenv()
 root_agent = Agent(
     model=os.getenv("GOOGLE_MODEL_NAME", "gemini-2.5-flash"),
     name='root_agent',

@@ -10,14 +10,8 @@ import {
   PromptInputAttachment,
   PromptInputAttachments,
   PromptInputBody,
-  PromptInputButton,
   type PromptInputMessage,
-  PromptInputModelSelect,
-  PromptInputModelSelectContent,
-  PromptInputModelSelectItem,
-  PromptInputModelSelectTrigger,
-  PromptInputModelSelectValue,
-  PromptInputSpeechButton,
+
   PromptInputSubmit,
   PromptInputTextarea,
   PromptInputFooter,
@@ -63,21 +57,28 @@ interface PromptInputComponentProps {
   prefillText?: string;
 }
 
-const models = [
-  { id: 'gpt-4', name: 'GPT-4' },
-  { id: 'gpt-3.5-turbo', name: 'GPT-3.5 Turbo' },
-  { id: 'claude-2', name: 'Claude 2' },
-  { id: 'claude-instant', name: 'Claude Instant' },
-  { id: 'palm-2', name: 'PaLM 2' },
-  { id: 'llama-2-70b', name: 'Llama 2 70B' },
-  { id: 'llama-2-13b', name: 'Llama 2 13B' },
-  { id: 'cohere-command', name: 'Command' },
-  { id: 'mistral-7b', name: 'Mistral 7B' },
-];
+
+
+const promptSuggestions = {
+  sales: [
+    "Show me the top performing sales contracts this quarter",
+    "Analyze customer churn patterns and provide retention strategies",
+    "Generate a sales forecast for the next 6 months based on current trends"
+  ],
+  legal: [
+    "Review the latest contract amendments and flag any compliance issues",
+    "Summarize pending legal documents requiring attention",
+    "Analyze contract cycle times and identify bottlenecks in the approval process"
+  ],
+  analytics: [
+    "Create a dashboard showing key performance metrics for the last 30 days",
+    "Compare envelope completion rates across different document types",
+    "Generate insights on user engagement patterns with our platform"
+  ]
+};
 
 const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputComponentProps) => {
   const [text, setText] = useState<string>('');
-  const [model, setModel] = useState<string>(models[0].id);
   const [status, setStatus] = useState<'submitted' | 'streaming' | 'ready' | 'error'>('ready');
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -272,7 +273,7 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
       }
 
       if (!messageContent.text) {
-        messageContent.text = cleanedText.trim() ? cleanedText : responseText;
+        messageContent.text = "";
       }
 
       setMessages((prev) => {
@@ -312,17 +313,86 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
 
   const isEmbedded = layout === 'embedded';
 
+  const PromptSuggestions = () => (
+    <div className="flex-1 flex items-center justify-center p-8">
+      <div className="w-full max-w-6xl">
+        <div className="text-center mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900 mb-2">How can I help you today?</h2>
+          <p className="text-gray-600">Choose a prompt below or ask your own question</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Sales Column */}
+          <div className="bg-linear-to-br from-blue-50 to-blue-100 rounded-lg p-6 border border-blue-200">
+            <h3 className="text-lg font-semibold text-blue-900 mb-4 flex items-center">
+              <span className="mr-2">📈</span> Sales
+            </h3>
+            <div className="space-y-3">
+              {promptSuggestions.sales.map((prompt, index) => (
+                <button
+                  key={index}
+                  onClick={() => setText(prompt)}
+                  className="w-full text-left p-3 bg-white rounded-md border border-blue-200 hover:border-blue-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-blue-900"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Legal Column */}
+          <div className="bg-linear-to-br from-green-50 to-green-100 rounded-lg p-6 border border-green-200">
+            <h3 className="text-lg font-semibold text-green-900 mb-4 flex items-center">
+              <span className="mr-2">⚖️</span> Legal
+            </h3>
+            <div className="space-y-3">
+              {promptSuggestions.legal.map((prompt, index) => (
+                <button
+                  key={index}
+                  onClick={() => setText(prompt)}
+                  className="w-full text-left p-3 bg-white rounded-md border border-green-200 hover:border-green-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-green-900"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Analytics Column */}
+          <div className="bg-linear-to-br from-purple-50 to-purple-100 rounded-lg p-6 border border-purple-200">
+            <h3 className="text-lg font-semibold text-purple-900 mb-4 flex items-center">
+              <span className="mr-2">📊</span> Analytics
+            </h3>
+            <div className="space-y-3">
+              {promptSuggestions.analytics.map((prompt, index) => (
+                <button
+                  key={index}
+                  onClick={() => setText(prompt)}
+                  className="w-full text-left p-3 bg-white rounded-md border border-purple-200 hover:border-purple-300 hover:shadow-md transition-all duration-200 text-sm text-gray-700 hover:text-purple-900"
+                >
+                  {prompt}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const chatPanel = (
     <div className={`flex flex-col w-full rounded-lg bg-white ${isEmbedded ? 'h-full' : 'h-[86vh]'}`}>
       <div className="flex-1 w-full overflow-y-auto p-4 space-y-6 flex flex-col-reverse">
-        {[...messages].reverse().map((msg, index) => (
+        {messages.length === 0 ? (
+          <PromptSuggestions />
+        ) : (
+          [...messages].reverse().map((msg, index) => (
           <div
             key={index}
             className={`flex mb-4 ${msg.role === 'user' ? 'ml-auto w-4/6 justify-end' : 'justify-start'}`}
           >
             <div
               className={`rounded-lg p-4 ${
-                msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black'
+                msg.role === 'user' ? 'bg-blue-500 text-white' : 'bg-gray-200 text-black w-full'
               }`}
             >
               {(() => {
@@ -351,7 +421,8 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
               })()}
             </div>
           </div>
-        ))}
+        ))
+        )}
       </div>
       <div className="border-t bg-white">
         <PromptInput globalDrop multiple onSubmit={handleSubmit}>
@@ -371,7 +442,7 @@ const PromptInputComponent = ({ layout = 'page', prefillText }: PromptInputCompo
               </PromptInputActionMenu>
           
             </PromptInputTools>
-            <PromptInputSubmit className="!h-8" status={status} />
+            <PromptInputSubmit className="h-8!" status={status} />
           </PromptInputFooter>
         </PromptInput>
       </div>
