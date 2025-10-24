@@ -62,7 +62,7 @@ const promptSuggestions = {
     "Plot the customers by name who have signed the most contracts in the last 60 days in a bar graph , and provide a analysis which user will be best to upsell",
   ],
   legal: [
-    "Show me the lastest government regulations on data privacy compliance and summarize the key points in bullet form",
+    "Show me the lastest government regulations on data privacy compliance and summarize the key points in bullet form and verify the risks if present in this pdf document",
   ],
   analytics: [
    "Analyze contract cycle times and identify bottlenecks in the approval process using bar graph"
